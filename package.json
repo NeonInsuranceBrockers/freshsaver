@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "prisma:migrate": "dotenv -e .env -- yarn prisma migrate dev",
-    "prisma:seed": "dotenv -e .env -- yarn prisma db seed"
+    "prisma:seed": "dotenv -e .env -- yarn prisma db seed",
+    "prisma:generate": "dotenv -e .env -- yarn prisma generate"
   },
   "dependencies": {
     "@bprogress/core": "^1.3.4",
