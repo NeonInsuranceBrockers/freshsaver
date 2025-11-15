@@ -1,0 +1,120 @@
+// /prisma/schema.prisma
+
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 1. Flow Definition Model
+model Flow {
+  id            String    @id @default(cuid())
+  name          String
+  nodes         Json      // Storing complex, unstructured data like nodes/edges as JSON
+  edges         Json
+  lastPublished DateTime? // Optional DateTime
+  isActive      Boolean   @default(false)
+
+  // Add createdAt and updatedAt for good practice
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// 2. Inventory Item Model
+model InventoryItem {
+  id              String   @id @default(cuid())
+  name            String
+  category        String
+  location        String
+  status          String
+  quantity        Int
+  unit            String
+  expiration_date DateTime
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// 3. Credential Model (with encryption in mind)
+model Credential {
+  id        String @id @default(cuid())
+  name      String
+  type      String // "API_KEY", "OAUTH"
+  secret    String // This will be the ENCRYPTED value
+  metadata  Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 4. Notification Log Model for Deduplication
+model NotificationLog {
+  id               String @id @default(cuid())
+  deduplicationKey String @unique // The unique key to prevent duplicates
+  flowId           String
+  itemId           String
+  sentAt           DateTime @default(now())
+  message          String
+}
+
+
+// --- NEW MODELS FOR MEAL PLANNER ---
+
+// 5. Represents a recipe saved by the user.
+model Recipe {
+  id           String @id @default(cuid())
+  name         String
+  instructions String?
+  imageUrl     String? // Optional field for a recipe image
+  status       String @default("BACKLOG")
+
+  // 6. A recipe has many ingredients
+  ingredients    Ingredient[]
+  // A recipe can be scheduled many times
+  scheduledMeals ScheduledMeal[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 7. Represents a single ingredient required for a recipe.
+model Ingredient {
+  id       String @id @default(cuid())
+  name     String // e.g., "Chicken Breast"
+  quantity Float  // Use Float for flexibility (e.g., 1.5 cups)
+  unit     String // e.g., "g", "cup", "tbsp"
+
+  // Relation to Recipe
+  recipeId String
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+}
+
+// 8. Connects a Recipe to a specific date and meal type on the calendar.
+model ScheduledMeal {
+  id       String   @id @default(cuid())
+  date     DateTime // The specific day it's scheduled for
+  mealType String   // "BREAKFAST", "LUNCH", or "DINNER"
+
+  // Relation to Recipe
+  recipeId String
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+
+model GroceryListItem {
+  id        String  @id @default(cuid())
+  name      String
+  quantity  Float?  // Optional
+  unit      String? // Optional
+  isChecked Boolean @default(false)
+
+  createdAt DateTime @default(now())
+}
