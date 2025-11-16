@@ -122,3 +122,18 @@ export interface FlowDefinition {
   lastPublished: Date | null;
   isActive?: boolean;
 }
+
+export interface FlowListItem {
+  id: string;
+  name: string;
+  isActive: boolean;
+  lastPublished: Date | null;
+  updatedAt: Date;
+}
+
+type SortKey = "updatedAt" | "name" | "isActive";
+
+export interface SortConfig {
+  key: SortKey;
+  direction: "ascending" | "descending";
+}

@@ -116,3 +116,69 @@ export async function executeFlowAction(
     return null;
   }
 }
+
+/**
+ * SERVER ACTION: Creates a new, empty flow definition.
+ * It initializes nodes and edges as empty JSON arrays.
+ * @returns The ID of the newly created flow.
+ */
+export async function createEmptyFlowAction(name: string): Promise<string> {
+  console.log("[Action] Creating new empty flow.");
+  try {
+    const newFlow = await prisma.flow.create({
+      data: {
+        name: name,
+        // Ensure nodes/edges are saved as empty JSON arrays
+        nodes: [] as unknown as Prisma.InputJsonValue,
+        edges: [] as unknown as Prisma.InputJsonValue,
+        isActive: false,
+      },
+      select: { id: true },
+    });
+    return newFlow.id;
+  } catch (error) {
+    console.error("createEmptyFlowAction failed:", error);
+    // Throw an error that Next.js Server Actions can serialize
+    throw new Error("Failed to create new flow.");
+  }
+}
+
+/**
+ * SERVER ACTION: Deactivates a flow by setting its isActive flag to false.
+ */
+export async function deactivateFlowAction(
+  flowId: string
+): Promise<{ success: boolean; message?: string }> {
+  console.log(`[Action] Deactivating flow: ${flowId}`);
+  try {
+    await prisma.flow.update({
+      where: { id: flowId },
+      data: {
+        isActive: false,
+      },
+    });
+    return { success: true };
+  } catch (error) {
+    console.error(`deactivateFlowAction failed for ${flowId}:`, error);
+    return { success: false, message: "Deactivation failed." };
+  }
+}
+
+/**
+ * SERVER ACTION: Deletes a flow definition from the database.
+ */
+export async function deleteFlowAction(
+  flowId: string
+): Promise<{ success: boolean; message?: string }> {
+  console.log(`[Action] Deleting flow: ${flowId}`);
+  try {
+    await prisma.flow.delete({
+      where: { id: flowId },
+    });
+    return { success: true };
+  } catch (error) {
+    console.error(`deleteFlowAction failed for ${flowId}:`, error);
+    // Note: If the ID does not exist, Prisma will throw an error, which we catch here.
+    return { success: false, message: "Deletion failed. Flow may not exist." };
+  }
+}

@@ -1,76 +1,62 @@
-// /src/app/(app)/dashboard/page.tsx
-
-import prisma from "@/lib/db/prisma";
-import { startOfDay, endOfDay, addDays } from "date-fns";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import TodaysMealsWidget from "@/components/dashboard/TodaysMealsWidget"; // <-- IMPORT WIDGET
-import ExpiringSoonWidget from "@/components/dashboard/ExpiringSoonWidget";
+// app/(app)/dashboard/page.tsx
+import { getDashboardData } from "@/lib/data/dashboard.data";
+import { getFlowsForAudit } from "@/lib/data/flow.data"; // NEW IMPORT
+import { ExecutiveSummary } from "./components/ExecutiveSummary";
+import { AutomationAudit } from "./components/AutomationAudit";
+import { MealWorkbench } from "./components/MealWorkbench";
+import { InventoryDistribution } from "./components/InventoryDistribution";
+// No need to import Flow from @prisma/client anymore here
 
 export default async function DashboardPage() {
-  // 1. Get today's date boundaries
-  const todayStart = startOfDay(new Date());
-  const todayEnd = endOfDay(new Date());
-
-  // 2. Get the date for 3 days from now
-  const threeDaysFromNow = addDays(todayStart, 3);
-
-  // 3. Fetch data in parallel
-  const [expiringSoonItems, todaysMeals] = await Promise.all([
-    // Query for items expiring within the next 3 days
-    prisma.inventoryItem.findMany({
-      where: {
-        expiration_date: {
-          gte: todayStart, // Greater than or equal to the start of today
-          lte: threeDaysFromNow, // Less than or equal to 3 days from now
-        },
-      },
-      orderBy: {
-        expiration_date: "asc",
-      },
-      take: 5, // Limit to the top 5 most urgent items
-    }),
-
-    // Query for meals scheduled for today
-    prisma.scheduledMeal.findMany({
-      where: {
-        date: {
-          gte: todayStart,
-          lte: todayEnd,
-        },
-      },
-      include: {
-        recipe: {
-          include: {
-            ingredients: true, // Crucial for the deduction logic
-          },
-        },
-      },
-    }),
+  // 1. Fetch ALL required data concurrently
+  // Use Promise.all for truly concurrent execution of all independent data fetches
+  const [dashboardData, flowsForAudit] = await Promise.all([
+    getDashboardData(),
+    getFlowsForAudit(),
   ]);
 
+  // 2. Destructure data into logical sections for passing to children
+  const {
+    systemHealth,
+    inventoryOverview,
+    automationPerformance,
+    mealPlanningSnapshot,
+  } = dashboardData;
+
+  // Combine health and inventory data for the Executive Summary
+  const executiveSummaryData = {
+    ...systemHealth,
+    ...inventoryOverview,
+  };
+
+  // Combine performance and current near expiry count for the Audit
+  const automationAuditData = {
+    ...automationPerformance,
+    nearExpiryCount: inventoryOverview.nearExpiryCount,
+  };
+
   return (
-    <div className="flex-grow p-4 sm:p-6 lg:p-8">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-        Dashboard
-      </h1>
-      <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-        Welcome back! Here&apos;s a summary of your kitchen.
-      </p>
+    <div className="space-y-10 py-6">
+      <h1 className="text-3xl font-bold">Automated Kitchen Command Center</h1>
 
-      {/* Grid for Dashboard Widgets */}
-      <div className="mt-6 grid gap-6 grid-cols-1 lg:grid-cols-3">
-        {/* --- USE THE NEW WIDGET --- */}
-        <TodaysMealsWidget todaysMeals={todaysMeals} />
+      {/* I. Executive Summary: Critical Status & Waste Risk */}
+      <ExecutiveSummary data={executiveSummaryData} />
 
-        {/* Placeholder for "Expiring Soon" Widget */}
-        <ExpiringSoonWidget items={expiringSoonItems} />
+      {/* II. Automation & Performance Audit */}
+      <AutomationAudit
+        data={automationAuditData}
+        flows={flowsForAudit} // Use the robustly fetched flow data
+      />
 
-        {/* Other widgets can go here */}
+      {/* III. Meal Preparation Workbench */}
+      <MealWorkbench data={mealPlanningSnapshot} />
+
+      {/* IV. Stock & Inventory Distribution */}
+      <InventoryDistribution data={inventoryOverview} />
+
+      <div className="pt-10 text-center text-sm text-gray-500">
+        Dashboard rendered as a Server Component at{" "}
+        {new Date().toLocaleTimeString()}.
       </div>
     </div>
   );
