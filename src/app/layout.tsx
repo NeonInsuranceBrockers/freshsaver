@@ -10,36 +10,32 @@ import Providers from "@/components/NProgressProvider";
 //   variable: "--font-sans",
 // });
 
-const siteUrl = "https://cedu.app"; // Example production domain
+const siteUrl = "https://www.freshsaverai.com";
 
 // --- SEO Metadata for CEDU ---
 export const metadata: Metadata = {
   // --- Basic Metadata ---
   title: {
-    template: "%s | CEDU",
-    default: "CEDU | Your Future Goes Beyond Borders",
+    template: "%s | FreshSaver AI",
+    default: "FreshSaver AI | Stop Food Waste, Start Saving",
   },
   description:
-    "Explore 1,500+ global universities and colleges. Submit your best possible application with a 95% success rate. Unlock your full potential with CEDU!",
+    "Automate your kitchen inventory, reduce food waste, and simplify meal planning with custom, AI-powered flows. Gain perfect visibility into expiration dates and stock levels.",
 
   // --- Keywords & Author ---
   keywords: [
-    "study abroad",
-    "university application",
-    "international students",
-    "find university",
-    "college search",
-    "CEDU",
-    "education partners",
-    "student recruitment",
-    "study in Canada",
-    "study in UK",
-    "study in USA",
-    "study in Australia",
-    "education consultant",
-    "university admissions",
+    "food waste reduction",
+    "smart kitchen",
+    "inventory management",
+    "meal planning automation",
+    "expiration tracking",
+    "grocery list sync",
+    "AI recipe generator",
+    "home efficiency",
+    "FreshSaver AI",
+    "automation flows",
   ],
-  authors: [{ name: "CEDU", url: siteUrl }],
+  authors: [{ name: "FreshSaver AI", url: siteUrl }],
 
   // --- Advanced SEO ---
   metadataBase: new URL(siteUrl),
@@ -57,17 +53,17 @@ export const metadata: Metadata = {
 
   // --- Open Graph (for Facebook, LinkedIn, etc.) ---
   openGraph: {
-    title: "CEDU | Your Future Goes Beyond Borders",
+    title: "FreshSaver AI | Automated Waste Reduction",
     description:
-      "Explore global universities and apply with a 95% success rate.",
+      "Automate expiry alerts, generate recipes from expiring stock, and save money by eliminating food waste.",
     url: siteUrl,
-    siteName: "CEDU",
+    siteName: "FreshSaver AI",
     images: [
       {
-        url: "/images/cedu-og-image.png",
+        url: "/images/freshsaver-og-image.png", // Ensure you update this asset path
         width: 1200,
         height: 630,
-        alt: "CEDU - Study Abroad Platform",
+        alt: "FreshSaver AI - Automated Kitchen Command Center",
       },
     ],
     locale: "en_US",
@@ -77,14 +73,13 @@ export const metadata: Metadata = {
   // --- Twitter Card (for Twitter) ---
   twitter: {
     card: "summary_large_image",
-    title: "CEDU | Your Future Goes Beyond Borders",
+    title: "FreshSaver AI | Stop Food Waste, Start Saving",
     description:
-      "Explore global universities and apply with a 95% success rate.",
-    images: ["/images/cedu-og-image.png"],
+      "Automate expiry alerts, generate recipes from expiring stock, and save money by eliminating food waste.",
+    images: ["/images/freshsaver-og-image.png"],
   },
 
   // --- Other Tags ---
-  // themeColor: "#f97316", // ❌ REMOVED: Moved to the 'viewport' export below
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.ico",
