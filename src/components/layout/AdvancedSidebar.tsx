@@ -238,6 +238,24 @@ export function AdvancedSidebar({
   }
 
   // --- Render for 'Expanded' or 'IconOnly' State ---
+  /**
+   * Handles the client-side logout process by destroying the authentication cookie.
+   *
+   * NOTE: This relies on client-side JavaScript access to delete the cookie.
+   * In production, it is generally safer to trigger a server action/API route
+   * to handle cookie deletion with secure headers (as shown in the previous answer).
+   */
+  function handleLogout() {
+    // 1. Set the cookie's expiration date to a time in the past, effectively deleting it.
+    // We use 'freshsaver-session' to match the middleware.
+    // The 'path=/' and domain must match the original cookie that was set.
+    document.cookie =
+      "freshsaver-session=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 UTC";
+
+    // 2. Refresh or redirect the user.
+    // We use window.location.href to force a full page refresh, which triggers the middleware.
+    window.location.href = "/login";
+  }
   return (
     <aside
       className={cn(
@@ -319,6 +337,7 @@ export function AdvancedSidebar({
               : "justify-center w-10 p-0 rounded-full"
           )}
           title={isExpanded ? "Logout" : "Logout"}
+          onClick={() => handleLogout()}
         >
           <LogOut className="h-5 w-5" />
           {isExpanded && <span className="ml-3 text-sm">Logout</span>}
