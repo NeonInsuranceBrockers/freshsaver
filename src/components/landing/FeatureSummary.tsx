@@ -14,7 +14,6 @@ export const FeatureSummary: React.FC = () => {
       headline: "Build Smart Workflows",
       description:
         "Create custom IF/THEN pipelines that monitor your inventory 24/7. Get alerts before milk expires, or trigger a recipe generator when meat is defrosted.",
-      color: "text-purple-600 bg-purple-100",
       anchor: "automation-flow",
     },
     {
@@ -23,7 +22,6 @@ export const FeatureSummary: React.FC = () => {
       headline: "Perfect Inventory Visibility",
       description:
         "Know exactly what you have, where it is, and when it expires. Organize items by category and location (Fridge, Pantry) to eliminate unnecessary purchases and reduce food waste.",
-      color: "text-green-600 bg-green-100",
       anchor: "inventory-control",
     },
     {
@@ -32,19 +30,18 @@ export const FeatureSummary: React.FC = () => {
       headline: "Seamless Meal Integration",
       description:
         "Turn expiring ingredients into scheduled meals. Automatically populate your shareable grocery list with missing items required for planned recipes.",
-      color: "text-blue-600 bg-blue-100",
       anchor: "meal-planning",
     },
   ];
 
   return (
-    <section id="features" className="py-20 bg-white dark:bg-gray-900">
+    <section id="features" className="py-20 bg-background">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <header className="text-center mb-16">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-blue-600">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-primary">
             The FreshSaver Difference
           </h2>
-          <p className="mt-2 text-3xl font-extrabold text-gray-900 dark:text-white sm:text-4xl">
+          <p className="mt-2 text-3xl font-extrabold text-foreground sm:text-4xl">
             Three Pillars of Kitchen Efficiency
           </p>
         </header>
@@ -56,17 +53,17 @@ export const FeatureSummary: React.FC = () => {
             return (
               <div
                 key={feature.title}
-                className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg hover:shadow-xl transition duration-300 border border-gray-100 dark:border-gray-700"
+                className="bg-card p-8 rounded-xl shadow-lg hover:shadow-xl transition duration-300 border border-border"
               >
                 <div
-                  className={`flex items-center justify-center w-12 h-12 rounded-full ${feature.color} mb-4`}
+                  className={`flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary mb-4`}
                 >
                   <IconComponent className="w-6 h-6" />
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
+                <h3 className="text-xl font-bold text-card-foreground mb-3">
                   {feature.headline}
                 </h3>
-                <p className="text-gray-600 dark:text-gray-300">
+                <p className="text-muted-foreground">
                   {feature.description}
                 </p>
               </div>

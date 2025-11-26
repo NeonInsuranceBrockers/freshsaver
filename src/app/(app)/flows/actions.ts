@@ -1,10 +1,11 @@
 // /app/(app)/flows/actions.ts
-"use server"; // This directive enables Server Actions for all functions in this file
+"use server";
 
 import { FlowDefinition, InventoryPayload } from "@/types/flow";
 import prisma from "@/lib/db/prisma";
 import { runTestExecution } from "@/lib/server/flowEngine";
 import { Prisma } from "@prisma/client";
+import { getAuthenticatedUser } from "@/lib/auth/session";
 
 // Define the return type for the client
 export interface FlowExecutionDetails {
@@ -15,50 +16,84 @@ export interface FlowExecutionDetails {
 
 /**
  * SERVER ACTION: Fetches a single flow definition from the database.
+ * SCOPED: Only returns if the flow belongs to the user's organization.
  */
 export async function getFlowDefinitionAction(
   flowId: string
 ): Promise<FlowDefinition> {
-  console.log(`[Action] Fetching flow: ${flowId}`);
-  const flow = await prisma.flow.findUnique({
-    where: { id: flowId },
+  const user = await getAuthenticatedUser();
+  console.log(
+    `[Action] Fetching flow: ${flowId} for Org: ${user.organizationId}`
+  );
+
+  // Use findFirst to allow filtering by organizationId
+  const flow = await prisma.flow.findFirst({
+    where: {
+      id: flowId,
+      organizationId: user.organizationId,
+    },
   });
 
   if (!flow) {
-    // When a Server Action throws an error, the client's `catch` block receives it.
-    throw new Error("Flow Not Found");
+    throw new Error("Flow Not Found or Access Denied");
   }
 
   return flow as unknown as FlowDefinition;
 }
 
 /**
- * SERVER ACTION: Saves (upserts) a flow definition to the database.
+ * SERVER ACTION: Saves (upserts) a flow definition.
+ * SCOPED: Enforces organization ownership before updating.
  */
 export async function saveFlowAction(
   definition: FlowDefinition
 ): Promise<{ success: boolean; message?: string }> {
+  const user = await getAuthenticatedUser();
   console.log(`[Action] Saving flow: ${definition.id}`);
+
   try {
     const { id, name, nodes, edges, lastPublished, isActive } = definition;
-    await prisma.flow.upsert({
+
+    // 1. Check if the flow exists globally to determine if we are Updating or Creating
+    const existingFlow = await prisma.flow.findUnique({
       where: { id },
-      update: {
-        name,
-        nodes: nodes as unknown as Prisma.InputJsonValue,
-        edges: edges as unknown as Prisma.InputJsonValue,
-        lastPublished,
-        isActive,
-      },
-      create: {
-        id,
-        name,
-        nodes: nodes as unknown as Prisma.InputJsonValue,
-        edges: edges as unknown as Prisma.InputJsonValue,
-        lastPublished,
-        isActive: isActive || false,
-      },
     });
+
+    if (existingFlow) {
+      // UPDATE SCENARIO: Check ownership
+      if (existingFlow.organizationId !== user.organizationId) {
+        return {
+          success: false,
+          message: "Unauthorized: You do not own this flow.",
+        };
+      }
+
+      await prisma.flow.update({
+        where: { id },
+        data: {
+          name,
+          nodes: nodes as unknown as Prisma.InputJsonValue,
+          edges: edges as unknown as Prisma.InputJsonValue,
+          lastPublished,
+          isActive,
+        },
+      });
+    } else {
+      // CREATE SCENARIO: Enforce Organization ID
+      await prisma.flow.create({
+        data: {
+          id, // Use the ID provided by client (usually from a previous createEmpty call, but handles edge cases)
+          organizationId: user.organizationId, // <--- CRITICAL
+          userId: user.id,
+          name,
+          nodes: nodes as unknown as Prisma.InputJsonValue,
+          edges: edges as unknown as Prisma.InputJsonValue,
+          lastPublished,
+          isActive: isActive || false,
+        },
+      });
+    }
+
     return { success: true };
   } catch (error) {
     console.error("saveFlowAction failed:", error);
@@ -67,21 +102,33 @@ export async function saveFlowAction(
 }
 
 /**
- * SERVER ACTION: Publishes a flow by setting its isActive flag.
+ * SERVER ACTION: Publishes a flow.
+ * SCOPED: Updates only if organization matches.
  */
 export async function publishFlowAction(
   flowId: string
 ): Promise<{ success: boolean; message?: string }> {
+  const user = await getAuthenticatedUser();
   console.log(`[Action] Publishing flow: ${flowId}`);
+
   try {
-    // You could add validation here before publishing
-    await prisma.flow.update({
-      where: { id: flowId },
+    // Use updateMany to safely filter by Organization ID
+    // updateMany returns a count of affected rows
+    const result = await prisma.flow.updateMany({
+      where: {
+        id: flowId,
+        organizationId: user.organizationId,
+      },
       data: {
         isActive: true,
         lastPublished: new Date(),
       },
     });
+
+    if (result.count === 0) {
+      return { success: false, message: "Flow not found or access denied." };
+    }
+
     return { success: true };
   } catch (error) {
     console.error(`publishFlowAction failed for ${flowId}:`, error);
@@ -90,16 +137,25 @@ export async function publishFlowAction(
 }
 
 /**
- * SERVER ACTION: Executes a test run of a given flow definition.
+ * SERVER ACTION: Executes a test run.
+ * SCOPED: Currently just checks auth.
+ * TODO: Ensure runTestExecution uses the user's org context for inventory lookups.
  */
 export async function executeFlowAction(
   flowDefinition: FlowDefinition
 ): Promise<FlowExecutionDetails | null> {
-  console.log(`[Action] Executing test for flow: ${flowDefinition.id}`);
+  const user = await getAuthenticatedUser();
+  console.log(
+    `[Action] Executing test for flow: ${flowDefinition.id} (Org: ${user.organizationId})`
+  );
+
   try {
     // Default item for client-side initiated tests
     const testItemId = "item-101";
 
+    // Note: In a real implementation, runTestExecution should probably accept
+    // user.organizationId to ensure it only looks up items belonging to this org.
+    // For now, we assume the engine might mock data or needs refactoring.
     const result = await runTestExecution(flowDefinition, testItemId);
 
     if (result) {
@@ -109,26 +165,27 @@ export async function executeFlowAction(
         finalPayload: result.finalPayload as unknown as InventoryPayload,
       };
     }
-    return null; // Trigger did not match
+    return null;
   } catch (error) {
     console.error(`executeFlowAction failed for ${flowDefinition.id}:`, error);
-    // In case the engine itself throws an error, return null
     return null;
   }
 }
 
 /**
- * SERVER ACTION: Creates a new, empty flow definition.
- * It initializes nodes and edges as empty JSON arrays.
- * @returns The ID of the newly created flow.
+ * SERVER ACTION: Creates a new, empty flow.
+ * SCOPED: Assigns the new flow to the user's organization.
  */
 export async function createEmptyFlowAction(name: string): Promise<string> {
+  const user = await getAuthenticatedUser();
   console.log("[Action] Creating new empty flow.");
+
   try {
     const newFlow = await prisma.flow.create({
       data: {
         name: name,
-        // Ensure nodes/edges are saved as empty JSON arrays
+        userId: user.id,
+        organizationId: user.organizationId, // <--- CRITICAL
         nodes: [] as unknown as Prisma.InputJsonValue,
         edges: [] as unknown as Prisma.InputJsonValue,
         isActive: false,
@@ -138,25 +195,35 @@ export async function createEmptyFlowAction(name: string): Promise<string> {
     return newFlow.id;
   } catch (error) {
     console.error("createEmptyFlowAction failed:", error);
-    // Throw an error that Next.js Server Actions can serialize
     throw new Error("Failed to create new flow.");
   }
 }
 
 /**
- * SERVER ACTION: Deactivates a flow by setting its isActive flag to false.
+ * SERVER ACTION: Deactivates a flow.
+ * SCOPED: Uses updateMany for safe filtering.
  */
 export async function deactivateFlowAction(
   flowId: string
 ): Promise<{ success: boolean; message?: string }> {
+  const user = await getAuthenticatedUser();
   console.log(`[Action] Deactivating flow: ${flowId}`);
+
   try {
-    await prisma.flow.update({
-      where: { id: flowId },
+    const result = await prisma.flow.updateMany({
+      where: {
+        id: flowId,
+        organizationId: user.organizationId,
+      },
       data: {
         isActive: false,
       },
     });
+
+    if (result.count === 0) {
+      return { success: false, message: "Flow not found or access denied." };
+    }
+
     return { success: true };
   } catch (error) {
     console.error(`deactivateFlowAction failed for ${flowId}:`, error);
@@ -165,20 +232,33 @@ export async function deactivateFlowAction(
 }
 
 /**
- * SERVER ACTION: Deletes a flow definition from the database.
+ * SERVER ACTION: Deletes a flow.
+ * SCOPED: Uses deleteMany to ensure a user can only delete their own org's flows.
  */
 export async function deleteFlowAction(
   flowId: string
 ): Promise<{ success: boolean; message?: string }> {
+  const user = await getAuthenticatedUser();
   console.log(`[Action] Deleting flow: ${flowId}`);
+
   try {
-    await prisma.flow.delete({
-      where: { id: flowId },
+    const result = await prisma.flow.deleteMany({
+      where: {
+        id: flowId,
+        organizationId: user.organizationId,
+      },
     });
+
+    if (result.count === 0) {
+      return {
+        success: false,
+        message: "Deletion failed. Flow may not exist or access denied.",
+      };
+    }
+
     return { success: true };
   } catch (error) {
     console.error(`deleteFlowAction failed for ${flowId}:`, error);
-    // Note: If the ID does not exist, Prisma will throw an error, which we catch here.
-    return { success: false, message: "Deletion failed. Flow may not exist." };
+    return { success: false, message: "Deletion failed." };
   }
 }

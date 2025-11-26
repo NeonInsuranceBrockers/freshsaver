@@ -8,33 +8,33 @@ import { Zap } from "lucide-react";
  */
 export const Footer: React.FC = () => {
   return (
-    <footer className="border-t bg-gray-100 dark:bg-gray-950 dark:border-gray-700">
+    <footer className="border-t border-border bg-muted/20">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Top Section: Logo and Main Links */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 border-b pb-8 dark:border-gray-700">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 border-b border-border pb-8">
           <div className="col-span-2 md:col-span-1">
             <Link
               href="/"
-              className="flex items-center space-x-2 font-bold text-lg text-blue-600 dark:text-blue-400"
+              className="flex items-center space-x-2 font-bold text-lg text-primary"
             >
               <Zap className="w-5 h-5" />
               <span>FreshSaver AI</span>
             </Link>
-            <p className="text-sm text-gray-500 mt-3">
+            <p className="text-sm text-muted-foreground mt-3">
               Automating efficiency, one kitchen at a time.
             </p>
           </div>
 
           {/* Features Column */}
           <div>
-            <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
+            <h4 className="font-semibold text-foreground mb-4">
               Product
             </h4>
-            <ul className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
+            <ul className="space-y-3 text-sm text-muted-foreground">
               <li>
                 <Link
                   href="#automation-flow"
-                  className="hover:text-blue-600 transition"
+                  className="hover:text-primary transition"
                 >
                   Automation Flows
                 </Link>
@@ -42,7 +42,7 @@ export const Footer: React.FC = () => {
               <li>
                 <Link
                   href="#inventory-control"
-                  className="hover:text-blue-600 transition"
+                  className="hover:text-primary transition"
                 >
                   Inventory Tracking
                 </Link>
@@ -50,7 +50,7 @@ export const Footer: React.FC = () => {
               <li>
                 <Link
                   href="#meal-planning"
-                  className="hover:text-blue-600 transition"
+                  className="hover:text-primary transition"
                 >
                   Meal Planning
                 </Link>
@@ -58,7 +58,7 @@ export const Footer: React.FC = () => {
               <li>
                 <Link
                   href="#detailed-features"
-                  className="hover:text-blue-600 transition"
+                  className="hover:text-primary transition"
                 >
                   Integrations
                 </Link>
@@ -68,19 +68,19 @@ export const Footer: React.FC = () => {
 
           {/* Company Column */}
           <div>
-            <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
+            <h4 className="font-semibold text-foreground mb-4">
               Company
             </h4>
-            <ul className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
+            <ul className="space-y-3 text-sm text-muted-foreground">
               <li>
-                <Link href="/about" className="hover:text-blue-600 transition">
+                <Link href="/about" className="hover:text-primary transition">
                   About Us
                 </Link>
               </li>
               <li>
                 <Link
                   href="/careers"
-                  className="hover:text-blue-600 transition"
+                  className="hover:text-primary transition"
                 >
                   Careers
                 </Link>
@@ -88,7 +88,7 @@ export const Footer: React.FC = () => {
               <li>
                 <Link
                   href="/contact"
-                  className="hover:text-blue-600 transition"
+                  className="hover:text-primary transition"
                 >
                   Contact
                 </Link>
@@ -98,19 +98,19 @@ export const Footer: React.FC = () => {
 
           {/* Legal Column */}
           <div>
-            <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
+            <h4 className="font-semibold text-foreground mb-4">
               Legal
             </h4>
-            <ul className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
+            <ul className="space-y-3 text-sm text-muted-foreground">
               <li>
-                <Link href="/terms" className="hover:text-blue-600 transition">
+                <Link href="/terms" className="hover:text-primary transition">
                   Terms of Service
                 </Link>
               </li>
               <li>
                 <Link
                   href="/privacy"
-                  className="hover:text-blue-600 transition"
+                  className="hover:text-primary transition"
                 >
                   Privacy Policy
                 </Link>
@@ -118,7 +118,7 @@ export const Footer: React.FC = () => {
               <li>
                 <Link
                   href="/cookies"
-                  className="hover:text-blue-600 transition"
+                  className="hover:text-primary transition"
                 >
                   Cookie Policy
                 </Link>
@@ -128,7 +128,7 @@ export const Footer: React.FC = () => {
         </div>
 
         {/* Bottom Section: Copyright */}
-        <div className="pt-8 flex flex-col md:flex-row justify-between items-center text-sm text-gray-500 dark:text-gray-400">
+        <div className="pt-8 flex flex-col md:flex-row justify-between items-center text-sm text-muted-foreground">
           <p>
             &copy; {new Date().getFullYear()} FreshSaver AI. All rights
             reserved.
@@ -139,7 +139,7 @@ export const Footer: React.FC = () => {
               href="https://twitter.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-blue-600"
+              className="hover:text-primary"
             >
               Twitter
             </a>
@@ -147,7 +147,7 @@ export const Footer: React.FC = () => {
               href="https://linkedin.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-blue-600"
+              className="hover:text-primary"
             >
               LinkedIn
             </a>

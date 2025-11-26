@@ -205,22 +205,20 @@ export function AdvancedSidebar({
   sidebarState,
   setSidebarState,
 }: AdvancedSidebarProps) {
-  // Hooks called unconditionally (NONE NEEDED INTERNALLY, state is from props)
   const pathname = usePathname();
 
   const isExpanded = sidebarState === "expanded";
   const isIconOnly = sidebarState === "iconOnly";
   const isHidden = sidebarState === "hidden";
 
-  // State Cycling Logic: Expanded -> IconOnly -> Hidden -> Expanded
+  // State Cycling Logic
   const cycleState = () => {
     if (isExpanded) setSidebarState("iconOnly");
     else if (isIconOnly) setSidebarState("hidden");
-    else setSidebarState("expanded"); // From hidden state
+    else setSidebarState("expanded");
   };
 
-  // --- Conditional Rendering for the 'Hidden' State ---
-  // We return early here. Since no hooks were called above, this is safe.
+  // --- Render for 'Hidden' State (Mobile Hamburger) ---
   if (isHidden) {
     return (
       <div className="fixed top-4 left-4 z-[100] transition-all duration-300">
@@ -237,140 +235,134 @@ export function AdvancedSidebar({
     );
   }
 
-  // --- Render for 'Expanded' or 'IconOnly' State ---
-  /**
-   * Handles the client-side logout process by destroying the authentication cookie.
-   *
-   * NOTE: This relies on client-side JavaScript access to delete the cookie.
-   * In production, it is generally safer to trigger a server action/API route
-   * to handle cookie deletion with secure headers (as shown in the previous answer).
-   */
   function handleLogout() {
-    // 1. Set the cookie's expiration date to a time in the past, effectively deleting it.
-    // We use 'freshsaver-session' to match the middleware.
-    // The 'path=/' and domain must match the original cookie that was set.
     document.cookie =
       "freshsaver-session=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 UTC";
-
-    // 2. Refresh or redirect the user.
-    // We use window.location.href to force a full page refresh, which triggers the middleware.
     window.location.href = "/login";
   }
+
   return (
-    <aside
-      className={cn(
-        "fixed top-0 left-0 h-screen bg-card border-r shadow-2xl transition-all duration-300 z-40 flex flex-col",
-        widthClasses[sidebarState],
-        // ADVANCED: Allows hover scrolling when iconOnly without constant scrollbar
-        isIconOnly && "overflow-y-hidden hover:overflow-y-auto"
-      )}
-    >
-      {/* Header/Logo Section */}
-      <div
+    <>
+      {/* Mobile Overlay Backdrop */}
+      <div 
         className={cn(
-          "h-16 flex items-center border-b",
-          isExpanded ? "justify-start px-3" : "justify-center"
+          "fixed inset-0 bg-black/50 z-30 md:hidden transition-opacity duration-300",
+          isHidden ? "opacity-0 pointer-events-none" : "opacity-100"
+        )}
+        onClick={() => setSidebarState("hidden")}
+      />
+
+      <aside
+        className={cn(
+          "fixed top-0 left-0 h-screen bg-sidebar border-r border-sidebar-border shadow-2xl transition-all duration-300 z-40 flex flex-col",
+          widthClasses[sidebarState],
+          "md:translate-x-0",
+          isIconOnly && "overflow-y-hidden hover:overflow-y-auto"
         )}
       >
-        {isExpanded ? (
-          <h1 className="text-xl font-bold tracking-tight text-primary">
-            SaaS App
-          </h1>
-        ) : (
-          <span className="text-xl font-bold text-primary">S</span>
-        )}
-      </div>
-
-      {/* Navigation Links (Scrollable) */}
-      <ScrollArea className="flex-1 py-4">
-        <div className="space-y-1">
-          {NAV_ITEMS.map((item) => {
-            if (item.collapsible) {
-              return (
-                <React.Fragment key={item.name}>
-                  {item.separator && (
-                    <div className="h-px bg-border my-4 mx-2" />
-                  )}
-                  <SidebarCollapsible
-                    item={item as NavCollapsibleItem}
-                    currentPath={pathname}
-                    isExpanded={isExpanded}
-                  />
-                </React.Fragment>
-              );
-            }
-
-            const IconComponent = getLucideIcon(item.icon);
-            if (!IconComponent) return null;
-
-            return (
-              <React.Fragment key={item.name}>
-                {item.separator && <div className="h-px bg-border my-4 mx-2" />}
-                <SidebarLink
-                  item={item as NavItem}
-                  isActive={pathname === item.href}
-                  isExpanded={isExpanded}
-                  IconComponent={IconComponent}
-                />
-              </React.Fragment>
-            );
-          })}
-        </div>
-        {/* Padding for scroll area bottom */}
-        <div className="h-10" />
-      </ScrollArea>
-
-      {/* Footer / Logout / Retraction Control */}
-      <div
-        className={cn(
-          "p-4 border-t sticky bottom-0 bg-card z-50 transition-all duration-300",
-          isExpanded ? "space-y-2" : "flex flex-col items-center space-y-3"
-        )}
-      >
-        {/* User/Logout Action */}
-        <Button
-          variant="ghost"
+        {/* Header/Logo Section */}
+        <div
           className={cn(
-            "w-full transition-colors h-10",
-            isExpanded
-              ? "justify-start px-3"
-              : "justify-center w-10 p-0 rounded-full"
+            "h-16 flex items-center border-b border-sidebar-border bg-sidebar",
+            isExpanded ? "justify-between px-4" : "justify-center"
           )}
-          title={isExpanded ? "Logout" : "Logout"}
-          onClick={() => handleLogout()}
-        >
-          <LogOut className="h-5 w-5" />
-          {isExpanded && <span className="ml-3 text-sm">Logout</span>}
-        </Button>
-
-        {/* Retraction Control Button */}
-        <Button
-          variant="secondary"
-          className={cn(
-            "mt-3 transition-all duration-300 shadow-md",
-            isExpanded ? "w-full justify-end" : "w-10 h-10 p-0 rounded-full"
-          )}
-          onClick={cycleState}
-          title={
-            isExpanded
-              ? "Minimize Menu"
-              : isIconOnly
-              ? "Hide Menu"
-              : "Expand Menu"
-          }
         >
           {isExpanded ? (
             <>
-              <span className="mr-2 text-sm font-medium">Minimize</span>
-              <ChevronLeft className="h-5 w-5" />
+              <Link href="/dashboard" className="flex items-center space-x-2">
+                <span className="font-bold text-xl tracking-tight text-primary">FreshSaver</span>
+              </Link>
+              {/* Mobile Close Button */}
+              <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSidebarState("hidden")}>
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
             </>
-          ) : isIconOnly ? (
-            <ChevronLeft className="h-5 w-5" /> // Cycles to Hidden
           ) : (
-            <ChevronRight className="h-5 w-5" /> // Should not run here, handled by early return
+            <span className="text-xl font-bold text-primary">FS</span>
           )}
-        </Button>
-      </div>
-    </aside>
+        </div>
+
+        {/* Navigation Links (Scrollable) */}
+        <ScrollArea className="flex-1 py-4">
+          <div className="space-y-1 px-2">
+            {NAV_ITEMS.map((item) => {
+              if (item.collapsible) {
+                return (
+                  <React.Fragment key={item.name}>
+                    {item.separator && (
+                      <div className="h-px bg-sidebar-border my-4 mx-2" />
+                    )}
+                    <SidebarCollapsible
+                      item={item as NavCollapsibleItem}
+                      currentPath={pathname}
+                      isExpanded={isExpanded}
+                    />
+                  </React.Fragment>
+                );
+              }
+
+              const IconComponent = getLucideIcon(item.icon);
+              if (!IconComponent) return null;
+
+              return (
+                <React.Fragment key={item.name}>
+                  {item.separator && <div className="h-px bg-sidebar-border my-4 mx-2" />}
+                  <SidebarLink
+                    item={item as NavItem}
+                    isActive={pathname === item.href}
+                    isExpanded={isExpanded}
+                    IconComponent={IconComponent}
+                  />
+                </React.Fragment>
+              );
+            })}
+          </div>
+          <div className="h-10" />
+        </ScrollArea>
+
+        {/* Footer / Logout / Retraction Control */}
+        <div
+          className={cn(
+            "p-4 border-t border-sidebar-border sticky bottom-0 bg-sidebar z-50 transition-all duration-300",
+            isExpanded ? "space-y-2" : "flex flex-col items-center space-y-3"
+          )}
+        >
+          {/* User/Logout Action */}
+          <Button
+            variant="ghost"
+            className={cn(
+              "w-full transition-colors h-10 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              isExpanded
+                ? "justify-start px-3"
+                : "justify-center w-10 p-0 rounded-full"
+            )}
+            title="Logout"
+            onClick={() => handleLogout()}
+          >
+            <LogOut className="h-5 w-5" />
+            {isExpanded && <span className="ml-3 text-sm">Logout</span>}
+          </Button>
+
+          {/* Retraction Control Button (Desktop Only) */}
+          <Button
+            variant="secondary"
+            className={cn(
+              "mt-3 transition-all duration-300 shadow-sm hidden md:flex",
+              isExpanded ? "w-full justify-end" : "w-10 h-10 p-0 rounded-full"
+            )}
+            onClick={cycleState}
+            title={isExpanded ? "Minimize" : "Expand"}
+          >
+            {isExpanded ? (
+              <ChevronLeft className="h-5 w-5" />
+            ) : isIconOnly ? (
+              <ChevronLeft className="h-5 w-5" />
+            ) : (
+              <ChevronRight className="h-5 w-5" />
+            )}
+          </Button>
+        </div>
+      </aside>
+    </>
   );
 }

@@ -1,6 +1,7 @@
 // /app/api/ai/generate/route.ts
 
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import prisma from "@/lib/db/prisma";
 import { decrypt } from "@/lib/server/crypto";
 import OpenAI from "openai";
@@ -8,13 +9,36 @@ import OpenAI from "openai";
 /**
  * AI Proxy API Route
  * Receives a prompt and a credentialId, then securely calls the OpenAI API.
+ * SECURED: Only allows access to credentials owned by the user's organization.
  */
 export async function POST(request: Request) {
   try {
+    // 1. Authenticate the User
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    // 2. Authorize via Database (Get Organization ID)
+    const user = await prisma.user.findUnique({
+      where: { clerkId },
+      select: { organizationId: true, status: true },
+    });
+
+    if (!user || user.status === "UNAUTHORIZED" || !user.organizationId) {
+      return NextResponse.json(
+        { success: false, error: "Access Denied: No Organization linked." },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { prompt, credentialId } = body;
 
-    // 1. Validate incoming request
+    // 3. Validate incoming request
     if (!prompt || !credentialId) {
       return NextResponse.json(
         { success: false, error: "Missing 'prompt' or 'credentialId'." },
@@ -22,85 +46,94 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Fetch the encrypted credential from the database
-    const credential = await prisma.credential.findUnique({
-      where: { id: credentialId },
+    // 4. Fetch the encrypted credential SCOPED to the Organization
+    // We use findFirst instead of findUnique to add the organizationId filter
+    const credential = await prisma.credential.findFirst({
+      where: {
+        id: credentialId,
+        organizationId: user.organizationId, // <--- CRITICAL SECURITY CHECK
+      },
     });
+
+    // --- DEMO MODE CHECK ---
+    let decryptedApiKey: string = "";
+    let useDemoMode = false;
 
     if (!credential) {
-      return NextResponse.json(
-        { success: false, error: "AI credential not found." },
-        { status: 404 } // Not Found
+      console.warn(
+        `[AI API] Credential ${credentialId} not found for Org ${user.organizationId}. Switching to Demo Mode.`
       );
+      // Note: In a real strict app, we might just error here.
+      // But for your demo flow, we fall back to mock data if the key is missing/inaccessible.
+      useDemoMode = true;
+    } else {
+      // 5. Decrypt the API key on the server
+      try {
+        decryptedApiKey = decrypt(credential.secret);
+      } catch (error) {
+        console.error("Failed to decrypt API key:", error);
+        useDemoMode = true;
+      }
     }
 
-    // 3. Decrypt the API key on the server
-    let decryptedApiKey: string;
-    try {
-      decryptedApiKey = decrypt(credential.secret);
-    } catch (error) {
-      console.error("Failed to decrypt API key:", error);
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Could not process credential. It may be corrupted.",
-        },
-        { status: 500 }
-      );
+    let recipeSuggestion = "";
+
+    if (!useDemoMode) {
+      try {
+        const openai = new OpenAI({
+          apiKey: decryptedApiKey,
+        });
+
+        console.log(
+          `[AI API] Calling OpenAI for credential: ${credential?.name}`
+        );
+
+        const completion = await openai.chat.completions.create({
+          model: "gpt-3.5-turbo",
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are a helpful assistant that provides creative recipe ideas.",
+            },
+            { role: "user", content: prompt },
+          ],
+          max_tokens: 150,
+        });
+
+        recipeSuggestion =
+          completion.choices[0]?.message?.content?.trim() || "";
+      } catch (error) {
+        console.error(
+          "[AI API] OpenAI call failed. Switching to Demo Mode.",
+          error
+        );
+        useDemoMode = true;
+      }
     }
 
-    // 4. Initialize the OpenAI client with the user's key
-    const openai = new OpenAI({
-      apiKey: decryptedApiKey,
-    });
-
-    console.log(`[AI API] Calling OpenAI for credential: ${credential.name}`);
-
-    // 5. Make the call to the OpenAI API
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo", // Or any other model
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a helpful assistant that provides creative recipe ideas.",
-        },
-        { role: "user", content: prompt },
-      ],
-      max_tokens: 150, // Limit the response length
-    });
-
-    const recipeSuggestion = completion.choices[0]?.message?.content?.trim();
-
-    if (!recipeSuggestion) {
-      throw new Error("OpenAI returned an empty response.");
+    // --- FALLBACK MOCK RESPONSE ---
+    if (useDemoMode || !recipeSuggestion) {
+      recipeSuggestion = `[DEMO MODE] Here is a simulated recipe based on your prompt: "${prompt}". \n\n1. Mix ingredients.\n2. Cook at 350°F.\n3. Enjoy your saved food! \n\n(Please configure a valid OpenAI API Key in your Organization Settings to get real AI suggestions.)`;
     }
 
-    console.log(`[AI API] OpenAI call successful.`);
+    console.log(`[AI API] Returning response (Demo: ${useDemoMode})`);
 
     // 6. Return the successful response
     return NextResponse.json({
       success: true,
       data: {
-        title: "AI Generated Recipe Idea", // We can parse this better in a real app
+        title: useDemoMode
+          ? "Demo Recipe Suggestion"
+          : "AI Generated Recipe Idea",
         suggestion: recipeSuggestion,
+        isDemo: useDemoMode,
       },
     });
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     console.error("[AI API] Error:", error);
-
-    // 7. Handle specific errors from OpenAI (like an invalid key)
-    if (error instanceof OpenAI.APIError) {
-      if (error.status === 401) {
-        return NextResponse.json(
-          { success: false, error: "Invalid OpenAI API Key provided." },
-          { status: 401 } // Unauthorized
-        );
-      }
-    }
-
-    // Handle generic errors
     return NextResponse.json(
       {
         success: false,

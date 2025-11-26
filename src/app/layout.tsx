@@ -4,6 +4,7 @@ import type { Metadata, Viewport } from "next"; // <-- Import Viewport type
 // import Navbar from "@/components/header";
 import "./globals.css";
 import Providers from "@/components/NProgressProvider";
+import { ClerkProvider } from "@clerk/nextjs";
 
 // const inter = Inter({
 //   subsets: ["latin"],
@@ -103,20 +104,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      // className={`${inter.variable} dark`}
-      suppressHydrationWarning
-    >
-      <body className="min-h-screen flex flex-col">
-        {/* <Navbar /> Use our Navbar component */}
-        {/* ✅ RENDER THE WRAPPER INSTEAD */}
-        <main className="grow">
-          <Providers>{children}</Providers>
-        </main>
+    <ClerkProvider>
+      <html
+        lang="en"
+        // className={`${inter.variable} dark`}
+        suppressHydrationWarning
+      >
+        <body className="min-h-screen flex flex-col">
+          {/* <Navbar /> Use our Navbar component */}
+          {/* ✅ RENDER THE WRAPPER INSTEAD */}
+          <main className="grow">
+            <Providers>{children}</Providers>
+          </main>
 
-        {/* <Footer /> */}
-      </body>
-    </html>
+          {/* <Footer /> */}
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

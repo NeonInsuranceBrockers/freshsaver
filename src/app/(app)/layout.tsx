@@ -21,32 +21,40 @@ const mainMarginClasses: Record<SidebarState, string> = {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   // 1. State Management for the sidebar size
-  // We start 'expanded' by default
+  // We start 'expanded' by default. On mobile, we might want to start 'hidden' ideally,
+  // but we can handle that with CSS media queries or a useEffect if needed.
   const [sidebarState, setSidebarState] = useState<SidebarState>("expanded");
 
   const isHidden = sidebarState === "hidden";
-  const marginClass = mainMarginClasses[sidebarState];
+  
+  // Dynamic margin classes based on sidebar state, ONLY applied on desktop (md:)
+  // On mobile, the sidebar will be an overlay, so no margin is needed.
+  const marginClass = {
+    expanded: "md:ml-72",
+    iconOnly: "md:ml-20",
+    hidden: "ml-0",
+  }[sidebarState];
 
   return (
     <>
-      {/* ✅ RENDER THE WRAPPER INSTEAD */}
-
-      {/* 1. Sidebar Component (Will handle its own fixed positioning) */}
+      {/* 1. Sidebar Component */}
       <AdvancedSidebar
         sidebarState={sidebarState}
         setSidebarState={setSidebarState}
       />
 
       {/* 2. Main Content Wrapper */}
-      {/* Apply dynamic margin and transition for smooth layout changes */}
+      {/* 
+          - On mobile (default): No margin (sidebar is overlay).
+          - On desktop (md:): Apply margin based on sidebar state.
+      */}
       <div
         className={cn(
-          "flex-1 min-h-screen transition-all duration-300 px-2",
-          // Apply margin unless the sidebar is completely hidden
+          "flex-1 min-h-screen transition-all duration-300 px-2 pt-16 md:pt-0", // Added pt-16 for mobile header space if needed, or just general padding
           !isHidden && marginClass
         )}
       >
-        <main className="max-w-7xl h-screen mx-auto">
+        <main className="max-w-7xl h-screen mx-auto p-4 md:p-6">
           <Providers>{children}</Providers>
         </main>
       </div>

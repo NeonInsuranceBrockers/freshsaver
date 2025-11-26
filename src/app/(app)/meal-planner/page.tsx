@@ -2,26 +2,37 @@
 
 import prisma from "@/lib/db/prisma";
 import MealPlannerContainer from "@/components/meal-planner/MealPlannerContainer";
+import { getAuthenticatedUser } from "@/lib/auth/session";
 
 // This is a Server Component, responsible for fetching all data needed for the feature.
 export default async function MealPlannerPage() {
-  // We need to fetch three sets of data in parallel for efficiency.
+  // 1. Secure the page and get the current user context
+  // This automatically redirects if the user is unauthorized
+  const user = await getAuthenticatedUser();
+
+  // 2. We need to fetch three sets of data in parallel, SCOPED to the Organization.
   const [recipes, scheduledMeals, inventoryItems] = await Promise.all([
-    // 1. Get all user recipes, and be sure to include their ingredients.
+    // A. Get recipes belonging to the user's organization
     prisma.recipe.findMany({
+      where: {
+        organizationId: user.organizationId,
+      },
       include: {
-        ingredients: true, // This is crucial for the "Smart Check" feature
+        ingredients: true,
       },
       orderBy: {
         name: "asc",
       },
     }),
 
-    // 2. Get all meals that are already scheduled on the calendar.
+    // B. Get scheduled meals.
+    // Since ScheduledMeal doesn't have an orgId, we filter by the related Recipe's orgId.
     prisma.scheduledMeal.findMany({
-      // --- THIS IS THE CRITICAL UPDATE ---
-      // We need to do a nested include to get the ingredients for the recipe
-      // that is attached to the scheduled meal.
+      where: {
+        recipe: {
+          organizationId: user.organizationId,
+        },
+      },
       include: {
         recipe: {
           include: {
@@ -34,12 +45,16 @@ export default async function MealPlannerPage() {
       },
     }),
 
-    // 3. Get the user's entire current inventory.
-    prisma.inventoryItem.findMany(),
+    // C. Get inventory items for the organization
+    prisma.inventoryItem.findMany({
+      where: {
+        organizationId: user.organizationId,
+      },
+    }),
   ]);
 
   return (
-    <div className="flex-grow p-4 sm:p-6 lg:p-8">
+    <div className="grow p-4 sm:p-6 lg:p-8">
       <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
         Meal Planner
       </h1>
@@ -49,11 +64,6 @@ export default async function MealPlannerPage() {
       </p>
 
       <div className="mt-6">
-        {/*
-          The invocation of MealPlannerContainer itself does not change.
-          What's important is that the data we pass into its props
-          now has the correct and complete shape.
-        */}
         <MealPlannerContainer
           initialRecipes={recipes}
           initialScheduledMeals={scheduledMeals}

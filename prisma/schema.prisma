@@ -1,30 +1,97 @@
 // /prisma/schema.prisma
 
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  // provider = "sqlite"
-  // url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
-  provider  = "postgresql"
-  url  	    = env("DATABASE_URL")
+// --- ENUMS FOR STRICT TYPING ---
+
+enum UserRole {
+  SUPER_ADMIN // System owner, can create organizations
+  ORG_ADMIN   // Manage their specific organization and users
+  MEMBER      // Standard user within an organization
+}
+
+enum UserStatus {
+  PENDING      // Created by Admin in DB, but hasn't signed up in Clerk yet
+  ACTIVE       // Linked to Clerk and active
+  INACTIVE     // Disabled by Admin
+  UNAUTHORIZED // Exists in Clerk but not linked to any Organization in DB
+}
+
+// --- ORGANIZATION MODEL ---
+// Replaces the old 'Team' model. This is the container for all company data.
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  
+  // An organization has many users
+  users       User[]
+
+  // All data belongs to the Organization (for Admin visibility)
+  flows             Flow[]
+  inventoryItems    InventoryItem[]
+  credentials       Credential[]
+  recipes           Recipe[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// --- USER MANAGEMENT ---
+
+model User {
+  id             String     @id @default(cuid())
+  // clerkId is OPTIONAL now. It is null when an Admin invites a user (Pre-provisioning).
+  // It gets filled when the user actually signs up via Clerk.
+  clerkId        String?    @unique 
+  email          String     @unique
+  name           String
+  
+  role           UserRole   @default(MEMBER)
+  status         UserStatus @default(PENDING)
+  avatarUrl      String?
+
+  // Relation to Organization
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  // Relations to Data (User still "owns" the creation, but it belongs to Org)
+  settings           UserSettings?
+  apiKeys            ApiKey[]
+  flows              Flow[]
+  inventoryItems     InventoryItem[]
+  credentials        Credential[]
+  notificationLogs   NotificationLog[]
+  recipes            Recipe[]
+  groceryListItems   GroceryListItem[]
+  analyticsSnapshots AnalyticsSnapshot[]
+  dataExports        DataExport[]
+  
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 }
 
 // 1. Flow Definition Model
 model Flow {
   id            String    @id @default(cuid())
+  userId        String    // Creator of the flow
+  organizationId String?  // The organization this data belongs to
   name          String
-  nodes         Json      // Storing complex, unstructured data like nodes/edges as JSON
+  nodes         Json
   edges         Json
-  lastPublished DateTime? // Optional DateTime
+  lastPublished DateTime?
   isActive      Boolean   @default(false)
 
-  // Add createdAt and updatedAt for good practice
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id])
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -32,6 +99,8 @@ model Flow {
 // 2. Inventory Item Model
 model InventoryItem {
   id              String   @id @default(cuid())
+  userId          String
+  organizationId  String?
   name            String
   category        String
   location        String
@@ -40,84 +109,219 @@ model InventoryItem {
   unit            String
   expiration_date DateTime
 
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id])
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
 
-// 3. Credential Model (with encryption in mind)
+// 3. Credential Model
 model Credential {
-  id        String @id @default(cuid())
-  name      String
-  type      String // "API_KEY", "OAUTH"
-  secret    String // This will be the ENCRYPTED value
-  metadata  Json
+  id             String @id @default(cuid())
+  userId         String
+  organizationId String?
+  name           String
+  type           String
+  secret         String
+  metadata       Json
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// 4. Notification Log Model for Deduplication
+// 4. Notification Log Model
 model NotificationLog {
   id               String @id @default(cuid())
-  deduplicationKey String @unique // The unique key to prevent duplicates
+  userId           String
+  deduplicationKey String @unique
   flowId           String
   itemId           String
   sentAt           DateTime @default(now())
   message          String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-
-// --- NEW MODELS FOR MEAL PLANNER ---
-
-// 5. Represents a recipe saved by the user.
+// 5. Recipe Model
 model Recipe {
-  id           String @id @default(cuid())
-  name         String
-  instructions String?
-  imageUrl     String? // Optional field for a recipe image
-  status       String @default("BACKLOG")
+  id             String @id @default(cuid())
+  userId         String
+  organizationId String?
+  name           String
+  instructions   String?
+  imageUrl       String?
+  status         String @default("BACKLOG")
 
-  // 6. A recipe has many ingredients
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id])
+
   ingredients    Ingredient[]
-  // A recipe can be scheduled many times
   scheduledMeals ScheduledMeal[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// 7. Represents a single ingredient required for a recipe.
+// 6. Ingredient Model
 model Ingredient {
   id       String @id @default(cuid())
-  name     String // e.g., "Chicken Breast"
-  quantity Float  // Use Float for flexibility (e.g., 1.5 cups)
-  unit     String // e.g., "g", "cup", "tbsp"
+  name     String
+  quantity Float
+  unit     String
 
-  // Relation to Recipe
   recipeId String
   recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
 }
 
-// 8. Connects a Recipe to a specific date and meal type on the calendar.
+// 7. Scheduled Meal Model
 model ScheduledMeal {
   id       String   @id @default(cuid())
-  date     DateTime // The specific day it's scheduled for
-  mealType String   // "BREAKFAST", "LUNCH", or "DINNER"
+  date     DateTime
+  mealType String
 
-  // Relation to Recipe
   recipeId String
   recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 }
-
 
 model GroceryListItem {
   id        String  @id @default(cuid())
+  userId    String
   name      String
-  quantity  Float?  // Optional
-  unit      String? // Optional
+  quantity  Float?
+  unit      String?
   isChecked Boolean @default(false)
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
+}
+
+// --- API KEYS ---
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  key         String    @unique
+  environment String    @default("PRODUCTION")
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// --- ANALYTICS ---
+
+model AnalyticsSnapshot {
+  id               String   @id @default(cuid())
+  userId           String
+  date             DateTime @default(now())
+  totalItems       Int      @default(0)
+  moneySaved       Float    @default(0)
+  wasteReduction   Float    @default(0)
+  activeUsers      Int      @default(0)
+  itemsExpiringSoon Int     @default(0)
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  metadata Json?
+  
+  createdAt DateTime @default(now())
+  
+  @@index([date])
+  @@index([userId, date])
+}
+
+// --- DATA EXPORTS ---
+
+model DataExport {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  format      String
+  size        String
+  status      String   @default("COMPLETED")
+  downloadUrl String?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+// --- USER SETTINGS ---
+
+model UserSettings {
+  id     String @id @default(cuid())
+  userId String @unique
+  
+  // General Settings
+  timezone        String  @default("UTC")
+  language        String  @default("en-US")
+  measurementUnit String  @default("IMPERIAL")
+  theme           String  @default("SYSTEM")
+  compactView     Boolean @default(false)
+  autoRefresh     Boolean @default(true)
+  
+  // Notification Settings
+  emailNotifications     Boolean @default(true)
+  pushNotifications      Boolean @default(true)
+  expirationAlerts       Boolean @default(true)
+  weeklySummary          Boolean @default(true)
+  recipeSuggestions      Boolean @default(false)
+  productUpdates         Boolean @default(false)
+  urgentAlerts           Boolean @default(true)
+  teamActivity           Boolean @default(false)
+  flowCompletions        Boolean @default(true)
+  emailFrequency         String  @default("REALTIME")
+  quietHoursStart        String?
+  quietHoursEnd          String?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// --- SUBSCRIPTION & BILLING ---
+// (Usually attached to Organization in B2B, but can stay on User if single-payer per org)
+model Subscription {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  plan          String    @default("PRO")
+  status        String    @default("ACTIVE")
+  amount        Float     @default(19.99)
+  currency      String    @default("USD")
+  interval      String    @default("MONTHLY")
+  nextBillingDate DateTime?
+  canceledAt    DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Invoice {
+  id          String   @id @default(cuid())
+  userId      String
+  amount      Float
+  currency    String   @default("USD")
+  status      String   @default("PAID")
+  pdfUrl      String?
+  
+  createdAt DateTime @default(now())
+  paidAt    DateTime?
+  
+  @@index([userId, createdAt])
 }

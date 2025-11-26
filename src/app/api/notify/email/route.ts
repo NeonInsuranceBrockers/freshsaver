@@ -11,8 +11,8 @@ const fromEmail = process.env.SENDGRID_FROM_EMAIL;
 if (sendgridApiKey) {
   sgMail.setApiKey(sendgridApiKey);
 } else {
-  console.error(
-    "SendGrid API Key is not configured. Email sending will be disabled."
+  console.warn(
+    "SendGrid API Key is not configured. Email sending will be SIMULATED."
   );
 }
 
@@ -21,16 +21,8 @@ if (sendgridApiKey) {
  * Expects a POST request with `to`, `subject`, and `body`.
  */
 export async function POST(request: Request) {
-  // 1. Validate server configuration
-  if (!sendgridApiKey || !fromEmail) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Email service is not configured on the server.",
-      },
-      { status: 500 }
-    );
-  }
+  // 1. Validate server configuration (Modified for Simulation)
+  const isSimulated = !sendgridApiKey || !fromEmail;
 
   try {
     // 2. Parse request body
@@ -49,10 +41,24 @@ export async function POST(request: Request) {
 
     console.log(`[Email API] Attempting to send email to: ${to}`);
 
+    if (isSimulated) {
+        console.log("--- SIMULATED EMAIL ---");
+        console.log(`To: ${to}`);
+        console.log(`Subject: ${subject}`);
+        console.log(`Message: ${message}`);
+        console.log("-----------------------");
+        
+        return NextResponse.json({
+            success: true,
+            message: "Email sent successfully (SIMULATED).",
+            isSimulated: true
+        });
+    }
+
     // 3. Construct the message payload for SendGrid
     const msg = {
       to: to,
-      from: fromEmail, // Use your verified sender email
+      from: fromEmail!, // We checked !isSimulated above, so this is safe-ish, but TS might complain
       subject: subject,
       html: `<p>${message}</p>`, // You can use HTML in the body
       text: message, // A plain text version for compatibility

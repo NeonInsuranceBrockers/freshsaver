@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/db/prisma";
 import FlowsClientWrapper from "./FlowsClientWrapper";
+import { getAuthenticatedUser } from "@/lib/auth/session";
 
 // Define the type for the data we select, ensuring consistency with the Client Wrapper
 type FlowListItem = {
@@ -14,16 +15,21 @@ type FlowListItem = {
 
 /**
  * Flow Automation Dashboard Page (Server Component).
- * This component's sole responsibility is to fetch the list of flows
- * and render the interactive Client Component wrapper.
+ * Fetches the list of flows belonging to the user's organization.
  */
 export default async function FlowsPage() {
+  // 1. Secure the page and get current user context
+  const user = await getAuthenticatedUser();
+
   let flows: FlowListItem[] = [];
   let error: string | null = null;
 
   try {
-    // 1. Fetch all flow metadata from the database
+    // 2. Fetch flow metadata SCOPED to the Organization
     flows = (await prisma.flow.findMany({
+      where: {
+        organizationId: user.organizationId,
+      },
       select: {
         id: true,
         name: true,
@@ -31,21 +37,18 @@ export default async function FlowsPage() {
         lastPublished: true,
         updatedAt: true,
       },
-      // 2. Order by last modified date for dashboard relevance
+      // 3. Order by last modified date for dashboard relevance
       orderBy: {
         updatedAt: "desc",
       },
-    })) as FlowListItem[]; // Cast for type safety
+    })) as FlowListItem[];
   } catch (e) {
     console.error("Error fetching flows:", e);
-    // In a production app, you might log this error externally
     error = "Failed to load flows data. Please check the database connection.";
-    // If fetching fails, we pass an empty array and rely on the client component to display the error.
   }
 
-  // 3. Pass the fetched data (or an empty array/error) to the client component
+  // 4. Pass the fetched data to the client component
   return (
-    // We use a main layout container here for full-width presentation
     <main className="flex-1 overflow-auto bg-gray-50">
       {error ? (
         <div className="p-8 text-center text-red-600 bg-red-100 m-8 rounded-lg border border-red-300">
