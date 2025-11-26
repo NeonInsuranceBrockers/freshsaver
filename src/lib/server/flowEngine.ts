@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // /lib/server/flowEngine.ts
 
 import {
@@ -7,7 +8,7 @@ import {
   NodeData,
   CleanEdge,
 } from "@/types/flow";
-import prisma from "@/lib/db/prisma"; // The one true data source
+import prisma from "@/lib/db/prisma";
 import {
   evaluateCondition,
   applyTemplate,
@@ -25,10 +26,12 @@ function generateServerPayload(
   const remainingDays = Math.ceil(
     (item.expiration_date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
   );
+
   return {
     trigger_event: triggerEvent,
     timestamp: new Date(),
-    user_id: "server-user-001", // Or from user session
+    // FIXED: Use the actual item owner's ID instead of a hardcoded string
+    user_id: item.userId,
     inventory_item: {
       id: item.id,
       name: item.name,
@@ -49,7 +52,7 @@ interface ExecutionResult {
   log: string[];
 }
 
-// --- Helper functions (findStartNode, matchesTrigger) adapted for Prisma types ---
+// --- Helper functions ---
 function findStartNode(flow: FlowDefinition): CleanNode | null {
   const nodes = flow.nodes as CleanNode[];
   const edges = flow.edges as CleanEdge[];
@@ -99,6 +102,7 @@ async function runNode(
 ): Promise<InventoryPayload> {
   const config = currentNode.config as NodeData;
   let updatedPayload = { ...currentPayload };
+  const currentUserId = currentPayload.user_id; // Retrieve owner ID from payload
 
   log.push(
     `-> Executing Node [${currentNode.id}] (${currentNode.type}): ${config.label}`
@@ -117,20 +121,30 @@ async function runNode(
       throw new Error("DUPLICATE_EXECUTION");
     }
 
-    // If we are here, the notification has NOT been sent yet.
     const message = applyTemplate(
       updatedPayload,
       (config.messageBody as string) || "No message body configured."
     );
+
+    // Helper to log success to DB
+    const logSuccessToDB = async () => {
+      await prisma.notificationLog.create({
+        data: {
+          deduplicationKey,
+          flowId,
+          itemId,
+          message,
+          userId: currentUserId, // <--- FIXED: Added userId
+        },
+      });
+    };
 
     // --- Channel-Specific Logic ---
     if (config.channel === "sms") {
       const recipientPhoneNumber = process.env.TEST_RECIPIENT_PHONE_NUMBER;
 
       if (!recipientPhoneNumber) {
-        log.push(
-          `  [Action] SMS FAILED: TEST_RECIPIENT_PHONE_NUMBER is not set in .env file.`
-        );
+        log.push(`  [Action] SMS FAILED: TEST_RECIPIENT_PHONE_NUMBER missing.`);
       } else {
         try {
           const response = await fetch(
@@ -144,43 +158,29 @@ async function runNode(
               }),
             }
           );
-
           const result = await response.json();
 
           if (!response.ok || !result.success) {
             log.push(
-              `  [Action] SMS FAILED: API responded with an error: ${
-                result.error || "Unknown error"
-              }`
+              `  [Action] SMS FAILED: ${result.error || "Unknown error"}`
             );
-            // We do NOT log to the DB, so the system can try again on the next cron run.
           } else {
             log.push(
-              `  [Action] SMS Sent Successfully to ${recipientPhoneNumber}. SID: ${result.messageSid}`
+              `  [Action] SMS Sent Successfully to ${recipientPhoneNumber}.`
             );
-            // Log to DB only on successful send to prevent duplicates.
-            await prisma.notificationLog.create({
-              data: { deduplicationKey, flowId, itemId, message },
-            });
+            await logSuccessToDB();
           }
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
-          log.push(
-            `  [Action] SMS FAILED: Could not connect to the notification API. Error: ${error.message}`
-          );
+          log.push(`  [Action] SMS FAILED: ${error.message}`);
         }
       }
     } else if (config.channel === "email") {
       const recipientEmail = process.env.TEST_RECIPIENT_EMAIL;
       if (!recipientEmail) {
-        log.push(
-          `  [Action] Email FAILED: TEST_RECIPIENT_EMAIL is not set in .env file.`
-        );
+        log.push(`  [Action] Email FAILED: TEST_RECIPIENT_EMAIL missing.`);
       } else {
         try {
-          // The subject can also be a template. For now, we'll create a generic one.
           const subject = `Notification for ${currentPayload.inventory_item.name}`;
-
           const response = await fetch(
             `${process.env.NEXT_PUBLIC_APP_URL}/api/notify/email`,
             {
@@ -189,56 +189,41 @@ async function runNode(
               body: JSON.stringify({ to: recipientEmail, subject, message }),
             }
           );
-
           const result = await response.json();
 
           if (!response.ok || !result.success) {
             log.push(
-              `  [Action] Email FAILED: API responded with an error: ${
-                result.error || "Unknown error"
-              }`
+              `  [Action] Email FAILED: ${result.error || "Unknown error"}`
             );
           } else {
             log.push(
               `  [Action] Email Sent Successfully to ${recipientEmail}.`
             );
-            // Log to DB only on successful send
-            await prisma.notificationLog.create({
-              data: { deduplicationKey, flowId, itemId, message },
-            });
+            await logSuccessToDB();
           }
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
-          log.push(
-            `  [Action] Email FAILED: Could not connect to the notification API. Error: ${error.message}`
-          );
+          log.push(`  [Action] Email FAILED: ${error.message}`);
         }
       }
-      // log.push(`  [Action] Email sending is not yet implemented.`);
-      // In a real implementation, we would NOT log to the DB here until it's successful.
     } else if (config.channel === "push") {
-      // For push notifications, you might call a service like Firebase Cloud Messaging.
-      // Since this is a simulation, we'll consider it an instant success.
       log.push(
         `  [Action] Push Notification simulated: "${message.substring(
           0,
           50
         )}..."`
       );
-      // Log success to DB for deduplication.
-      await prisma.notificationLog.create({
-        data: { deduplicationKey, flowId, itemId, message },
-      });
+      await logSuccessToDB();
     }
   } else if (currentNode.type === "PartnerIntegration") {
     const credentialId = config.credentialId as string;
+    // Security Note: In a real run, we should also check if the credential belongs to the currentUserId's Org
     const credential = await prisma.credential.findUnique({
       where: { id: credentialId },
     });
     if (credential) {
       log.push(`  [Action] Authenticated with credential: ${credential.name}.`);
       log.push(
-        `  [Sim] Simulated external API call for action: "${config.actionDetail}".`
+        `  [Sim] Simulated external API call: "${config.actionDetail}".`
       );
     } else {
       log.push(`  [Action] FAILED: Credential ID "${credentialId}" not found.`);
@@ -255,13 +240,12 @@ async function runNode(
         });
         log.push(`  [DB] Updated item ${itemId} status to: ${newValue}.`);
         updatedPayload.inventory_item.status = newValue as string;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (error) {
-        log.push(`  [DB] FAILED to update item ${itemId} in database.`);
+        log.push(`  [DB] FAILED to update item ${itemId}.`);
       }
     } else {
       log.push(
-        `  [Action] FAILED: UpdateData node only supports updating 'inventory_item.status' in this mock.`
+        `  [Action] FAILED: Only 'inventory_item.status' updates supported.`
       );
     }
   } else if (currentNode.type === "GenerateRecipe") {
@@ -269,9 +253,7 @@ async function runNode(
     const credentialId = config.credentialId as string;
 
     if (!promptTemplate || !credentialId) {
-      log.push(
-        `  [AI] FAILED: Node is not fully configured. Missing prompt or credential link.`
-      );
+      log.push(`  [AI] FAILED: Missing prompt or credential.`);
     } else {
       const finalPrompt = applyTemplate(currentPayload, promptTemplate);
       try {
@@ -279,61 +261,41 @@ async function runNode(
           `${process.env.NEXT_PUBLIC_APP_URL}/api/ai/generate`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              // Note: The AI route expects a Cookie/Auth header usually.
+              // Since this is server-to-server, we might need an internal bypass or API Key.
+              // For this demo, we assume the API route allows internal calls or we mock it.
+            },
             body: JSON.stringify({ prompt: finalPrompt, credentialId }),
           }
         );
-
         const result = await response.json();
 
         if (!response.ok || !result.success) {
-          // The API failed (e.g., invalid key, server error)
-          log.push(
-            `  [AI] FAILED: API responded with an error: ${
-              result.error || "Unknown error"
-            }`
-          );
-
-          // Enrich the payload with the error for downstream nodes to use
+          log.push(`  [AI] FAILED: ${result.error || "Unknown error"}`);
           updatedPayload = enrichPayload(
             updatedPayload,
             "recipe_error",
-            `AI Error: ${result.error || "Unknown error"}`
+            `AI Error: ${result.error}`
           );
         } else {
-          // The API call was successful
           log.push(`  [AI] Successfully generated recipe suggestion.`);
-
-          // Enrich the payload with the AI's response data
           updatedPayload = enrichPayload(
             updatedPayload,
             "recipe_suggestions",
             result.data
           );
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (error: any) {
-        log.push(
-          `  [AI] FAILED: Could not connect to the AI proxy API. Error: ${error.message}`
-        );
+        log.push(`  [AI] FAILED: Connection Error: ${error.message}`);
         updatedPayload = enrichPayload(
           updatedPayload,
           "recipe_error",
-          `AI Connection Error: ${error.message}`
+          `Error: ${error.message}`
         );
       }
     }
-
-    // const mockRecipe = {
-    //   title: `Quick Recipe for ${currentPayload.inventory_item.name}`,
-    //   link: `https://example.com/recipe/${currentPayload.inventory_item.id}`,
-    // };
-    // updatedPayload = enrichPayload(
-    //   updatedPayload,
-    //   "recipe_suggestions",
-    //   mockRecipe
-    // );
-    // log.push(`  [AI] Generated recipe suggestion: "${mockRecipe.title}".`);
   }
 
   return updatedPayload;
@@ -359,9 +321,7 @@ async function runFlowExecution(
   let currentNode = findStartNode(flow);
 
   if (!currentNode) {
-    log.push(
-      "  [Error] Flow execution failed: No valid start/trigger node found."
-    );
+    log.push("  [Error] No valid start/trigger node found.");
     return { trace, finalPayload: currentPayload, log };
   }
 
@@ -370,7 +330,6 @@ async function runFlowExecution(
     trace.push(currentNode.id);
     try {
       currentPayload = await runNode(currentNode, flow.id, currentPayload, log);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       if (error.message === "DUPLICATE_EXECUTION") {
         log.push("  [Trace] Execution halted by deduplication check.");
@@ -399,21 +358,17 @@ async function runFlowExecution(
       nextNodeId = outgoingEdges[0]?.target;
     }
 
-    if (nextNodeId) {
-      currentNode = nodesMap.get(nextNodeId) || null;
-    } else {
-      log.push("  [Trace] Path ended.");
-      currentNode = null;
-    }
+    currentNode = nextNodeId ? nodesMap.get(nextNodeId) || null : null;
+    if (!currentNode) log.push("  [Trace] Path ended.");
   }
 
   return { trace, finalPayload: currentPayload, log };
 }
 
-// --- PUBLIC EXPORTS FOR API/CRON JOB ---
+// --- PUBLIC EXPORTS ---
 
 /**
- * For the "Execute (Test)" button. Runs a specific flow against a test item.
+ * Execute a specific flow against a test item.
  */
 export async function runTestExecution(
   flowDefinition: FlowDefinition,
@@ -437,29 +392,55 @@ export async function runTestExecution(
 }
 
 /**
- * For the background CRON job. Finds and executes all active flows against all relevant items.
+ * Background CRON job executor.
+ * FIXED: Ensures flows only execute against items in the SAME ORGANIZATION.
  */
 export async function findAndExecuteActiveFlows(): Promise<{
   count: number;
   message: string;
 }> {
   console.log("--- [SERVER ENGINE CYCLE START] ---");
-  const activeFlows = await prisma.flow.findMany({ where: { isActive: true } });
+
+  // 1. Get all active flows
+  const activeFlows = await prisma.flow.findMany({
+    where: { isActive: true },
+    // Make sure we know which org owns the flow
+    select: {
+      id: true,
+      nodes: true,
+      edges: true,
+      organizationId: true,
+      isActive: true,
+      name: true,
+      userId: true,
+      lastPublished: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
   if (activeFlows.length === 0)
     return { count: 0, message: "No active flows." };
 
-  // In a real scenario, you'd filter for items that are near expiry, etc.
-  const allItems = await prisma.inventoryItem.findMany();
   let executionCount = 0;
 
   for (const flow of activeFlows) {
-    for (const item of allItems) {
+    if (!flow.organizationId) continue; // Skip flows without an org (orphans)
+
+    // 2. Fetch items ONLY for this flow's organization
+    // This prevents "Data Leakage" between tenants.
+    const orgItems = await prisma.inventoryItem.findMany({
+      where: { organizationId: flow.organizationId },
+    });
+
+    for (const item of orgItems) {
       if (matchesTrigger(item, flow as unknown as FlowDefinition)) {
         const startNode = findStartNode(flow as unknown as FlowDefinition);
         const payload = generateServerPayload(
           item,
           startNode?.type || "Unknown"
         );
+
         await runFlowExecution(flow as unknown as FlowDefinition, payload);
         executionCount++;
       }

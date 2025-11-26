@@ -3,10 +3,10 @@
 
 import prisma from "@/lib/db/prisma";
 import { findAndExecuteActiveFlows } from "@/lib/server/flowEngine";
-// import { Prisma } from "@prisma/client";
+import { getAuthenticatedUser } from "@/lib/auth/session";
+import { Prisma } from "@prisma/client";
 
 // --- Data Seeding Action ---
-// We will copy the logic from our old prisma/seed.ts here
 const getFutureDate = (days: number) => {
   const d = new Date();
   d.setDate(d.getDate() + days);
@@ -15,21 +15,41 @@ const getFutureDate = (days: number) => {
 
 export async function seedDatabaseAction() {
   try {
+    // 1. Get Context (Who is running this seed?)
+    const user = await getAuthenticatedUser();
+    const orgId = user.organizationId;
+
+    if (!orgId) {
+      return {
+        success: false,
+        message: "You must be part of an Organization to seed data.",
+      };
+    }
+
+    // 2. Clear ONLY this Organization's data
+    // We rely on Cascade deletes in the schema for relations (e.g. Recipe -> Ingredient)
     await prisma.$transaction([
-      prisma.notificationLog.deleteMany(),
-      prisma.credential.deleteMany(),
-      prisma.inventoryItem.deleteMany(),
-      prisma.flow.deleteMany(),
-      prisma.scheduledMeal.deleteMany(),
-      prisma.ingredient.deleteMany(),
-      prisma.recipe.deleteMany(),
+      prisma.notificationLog.deleteMany({
+        where: { user: { organizationId: orgId } },
+      }),
+      prisma.credential.deleteMany({ where: { organizationId: orgId } }),
+      prisma.inventoryItem.deleteMany({ where: { organizationId: orgId } }),
+      prisma.flow.deleteMany({ where: { organizationId: orgId } }),
+      prisma.scheduledMeal.deleteMany({
+        where: { recipe: { organizationId: orgId } },
+      }),
+      // Deleting recipes will cascade delete ingredients
+      prisma.recipe.deleteMany({ where: { organizationId: orgId } }),
     ]);
 
+    // 3. Create Flow (Linked to User & Org)
     await prisma.flow.create({
       data: {
         id: "complex-123",
+        userId: user.id, // <--- REQUIRED FIX
+        organizationId: orgId, // <--- REQUIRED FIX
         name: "Full Waste Reduction Pipeline",
-        isActive: false, // Start as inactive
+        isActive: false,
         nodes: [
           {
             id: "n1",
@@ -87,7 +107,7 @@ export async function seedDatabaseAction() {
               httpMethod: "POST",
             },
           },
-        ],
+        ] as unknown as Prisma.InputJsonValue, // Explicit cast for JSON
         edges: [
           {
             id: "e1",
@@ -119,10 +139,11 @@ export async function seedDatabaseAction() {
             sourceHandle: "output-recipe-payload",
             targetHandle: "input-payload",
           },
-        ],
+        ] as unknown as Prisma.InputJsonValue, // Explicit cast for JSON
       },
     });
 
+    // 4. Create Inventory Items (Linked to User & Org)
     await prisma.inventoryItem.createMany({
       data: [
         {
@@ -155,9 +176,14 @@ export async function seedDatabaseAction() {
           unit: "g",
           expiration_date: getFutureDate(60),
         },
-      ],
+      ].map((item) => ({
+        ...item,
+        userId: user.id, // <--- REQUIRED FIX
+        organizationId: orgId, // <--- REQUIRED FIX
+      })),
     });
 
+    // 5. Create Credentials (Linked to User & Org)
     await prisma.credential.createMany({
       data: [
         {
@@ -174,17 +200,23 @@ export async function seedDatabaseAction() {
           secret: "ENCRYPTED_OAUTH_ABC",
           metadata: { device: "FSR-4000" },
         },
-      ],
+      ].map((cred) => ({
+        ...cred,
+        userId: user.id, // <--- REQUIRED FIX
+        organizationId: orgId, // <--- REQUIRED FIX
+      })),
     });
 
+    // 6. Create Recipes (Linked to User & Org)
     await prisma.recipe.create({
       data: {
-        id: "recipe-omelette", // Use static ID for easy reference
+        id: "recipe-omelette",
+        userId: user.id, // <--- REQUIRED FIX
+        organizationId: orgId, // <--- REQUIRED FIX
         name: "Cheese Omelette",
         instructions:
           "Whisk eggs and milk. Pour into a hot pan. Add cheese, fold, and serve.",
         ingredients: {
-          // This nested 'create' is only valid in prisma.recipe.create
           create: [
             { name: "Eggs", quantity: 3, unit: "unit" },
             { name: "Cheese Block", quantity: 50, unit: "g" },
@@ -197,6 +229,8 @@ export async function seedDatabaseAction() {
     await prisma.recipe.create({
       data: {
         id: "recipe-spaghetti",
+        userId: user.id,
+        organizationId: orgId,
         name: "Simple Spaghetti",
         instructions: "Boil spaghetti. Heat sauce. Combine and serve.",
         ingredients: {
@@ -211,6 +245,8 @@ export async function seedDatabaseAction() {
     await prisma.recipe.create({
       data: {
         id: "recipe-stir-fry",
+        userId: user.id,
+        organizationId: orgId,
         name: "Chicken Stir-Fry",
         instructions:
           "Slice chicken and vegetables. Stir-fry chicken until cooked. Add vegetables, then sauce. Serve over rice.",
@@ -228,18 +264,16 @@ export async function seedDatabaseAction() {
       data: [
         {
           recipeId: "recipe-omelette",
-          date: new Date(), // Today
+          date: new Date(),
           mealType: "BREAKFAST",
         },
         {
           recipeId: "recipe-spaghetti",
-          date: getFutureDate(1), // Tomorrow
+          date: getFutureDate(1),
           mealType: "DINNER",
         },
       ],
     });
-
-    // ... add credentials seeding if needed
 
     return { success: true, message: "Database seeded successfully!" };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -251,16 +285,27 @@ export async function seedDatabaseAction() {
 // --- Data Clearing Action ---
 export async function clearDatabaseAction() {
   try {
+    const user = await getAuthenticatedUser();
+    const orgId = user.organizationId;
+
+    if (!orgId) return { success: false, message: "No organization found." };
+
     await prisma.$transaction([
-      prisma.notificationLog.deleteMany(),
-      prisma.credential.deleteMany(),
-      prisma.inventoryItem.deleteMany(),
-      prisma.flow.deleteMany(),
-      prisma.scheduledMeal.deleteMany(),
-      prisma.ingredient.deleteMany(),
-      prisma.recipe.deleteMany(),
+      prisma.notificationLog.deleteMany({
+        where: { user: { organizationId: orgId } },
+      }),
+      prisma.credential.deleteMany({ where: { organizationId: orgId } }),
+      prisma.inventoryItem.deleteMany({ where: { organizationId: orgId } }),
+      prisma.flow.deleteMany({ where: { organizationId: orgId } }),
+      prisma.scheduledMeal.deleteMany({
+        where: { recipe: { organizationId: orgId } },
+      }),
+      prisma.recipe.deleteMany({ where: { organizationId: orgId } }),
     ]);
-    return { success: true, message: "Database cleared successfully!" };
+    return {
+      success: true,
+      message: "Organization data cleared successfully!",
+    };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     return { success: false, message: `Clearing failed: ${error.message}` };
@@ -269,21 +314,38 @@ export async function clearDatabaseAction() {
 
 // --- Data Fetching Action ---
 export async function getTableDataAction(tableName: string) {
+  const user = await getAuthenticatedUser();
+  const orgId = user.organizationId;
+
+  if (!orgId) return [];
+
+  const orgFilter = { organizationId: orgId };
+  const userOrgFilter = { user: { organizationId: orgId } };
+
   switch (tableName) {
     case "flows":
-      return prisma.flow.findMany();
+      return prisma.flow.findMany({ where: orgFilter });
     case "inventory":
-      return prisma.inventoryItem.findMany();
+      return prisma.inventoryItem.findMany({ where: orgFilter });
     case "credentials":
-      return prisma.credential.findMany();
+      return prisma.credential.findMany({ where: orgFilter });
     case "notificationLogs":
-      return prisma.notificationLog.findMany();
+      return prisma.notificationLog.findMany({ where: userOrgFilter });
     case "recipes":
-      return prisma.recipe.findMany({ include: { ingredients: true } });
+      return prisma.recipe.findMany({
+        where: orgFilter,
+        include: { ingredients: true },
+      });
     case "ingredients":
-      return prisma.ingredient.findMany();
+      // Ingredients don't have direct orgId, link via recipe
+      return prisma.ingredient.findMany({
+        where: { recipe: { organizationId: orgId } },
+      });
     case "scheduledMeals":
-      return prisma.scheduledMeal.findMany({ include: { recipe: true } });
+      return prisma.scheduledMeal.findMany({
+        where: { recipe: { organizationId: orgId } },
+        include: { recipe: true },
+      });
     default:
       return [];
   }

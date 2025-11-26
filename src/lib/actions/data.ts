@@ -1,16 +1,41 @@
-// Server actions for fetching data from database with user-based access control
+// /src/lib/actions/data.ts
+
 import prisma from "@/lib/db/prisma";
 import { cache } from "react";
-import { getCurrentUser, getUserIdForQuery, isAdmin } from "@/lib/auth/user";
+// Ensure getCurrentUser is the one from @/lib/auth/session that returns the Prisma User
+import { getAuthenticatedUser } from "@/lib/auth/session";
+import { UserRole } from "@prisma/client";
+
+// --- HELPERS ---
+// Reusing our session logic to ensure consistency
+const getCurrentUser = async () => {
+  try {
+    return await getAuthenticatedUser();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  } catch (e) {
+    return null;
+  }
+};
+
+const isAtLeastOrgAdmin = (role: UserRole) => {
+  return role === UserRole.ORG_ADMIN || role === UserRole.SUPER_ADMIN;
+};
+
+// --- ACTIONS ---
 
 // Analytics Actions
 export const getLatestAnalytics = cache(async () => {
   try {
     const user = await getCurrentUser();
-    if (!user) return null;
+    if (!user || !user.organizationId) return null;
+
+    // Org Admins see analytics for the Org (via filtering related users or specific snapshot logic)
+    // Note: AnalyticsSnapshot currently has userId. If we want Org analytics, we might need to aggregate.
+    // For now, let's show the user's own analytics, or if Admin, arguably they want to see Org stats.
+    // Let's stick to simple ownership for now to fix the build error.
 
     const latest = await prisma.analyticsSnapshot.findFirst({
-      where: user.role === "ADMIN" ? {} : { userId: user.id },
+      where: { userId: user.id }, // Keeping it personal for now until Analytics schema is upgraded
       orderBy: { date: "desc" },
     });
     return latest;
@@ -26,7 +51,7 @@ export const getAnalyticsHistory = cache(async (days: number = 30) => {
     if (!user) return [];
 
     const history = await prisma.analyticsSnapshot.findMany({
-      where: user.role === "ADMIN" ? {} : { userId: user.id },
+      where: { userId: user.id },
       orderBy: { date: "desc" },
       take: days,
     });
@@ -41,21 +66,18 @@ export const getAnalyticsHistory = cache(async (days: number = 30) => {
 export const getAllUsers = cache(async () => {
   try {
     const currentUser = await getCurrentUser();
-    if (!currentUser) return [];
+    if (!currentUser || !currentUser.organizationId) return [];
 
-    // Only admins can see all users
-    if (currentUser.role !== "ADMIN") {
+    // Only admins can see all users IN THEIR ORG
+    if (!isAtLeastOrgAdmin(currentUser.role)) {
       return [currentUser];
     }
 
     const users = await prisma.user.findMany({
-      include: {
-        teamMemberships: {
-          include: {
-            team: true,
-          },
-        },
+      where: {
+        organizationId: currentUser.organizationId, // Scope to Org
       },
+      // Removed 'teamMemberships' include as we deprecated that model in favor of 'Organization'
       orderBy: { createdAt: "desc" },
     });
     return users;
@@ -68,28 +90,36 @@ export const getAllUsers = cache(async () => {
 export const getTeamStats = cache(async () => {
   try {
     const currentUser = await getCurrentUser();
-    if (!currentUser) {
+    if (!currentUser || !currentUser.organizationId) {
       return { totalMembers: 0, activeThisWeek: 0, pendingInvites: 0 };
     }
 
-    // For admins, show all stats
-    if (currentUser.role === "ADMIN") {
-      const totalMembers = await prisma.user.count();
+    // For Org Admins, show stats for THEIR organization
+    if (isAtLeastOrgAdmin(currentUser.role)) {
+      const orgFilter = { organizationId: currentUser.organizationId };
+
+      const totalMembers = await prisma.user.count({ where: orgFilter });
+
       const activeThisWeek = await prisma.user.count({
         where: {
+          ...orgFilter,
           updatedAt: {
             gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
           },
         },
       });
+
       const pendingInvites = await prisma.user.count({
-        where: { status: "PENDING" },
+        where: {
+          ...orgFilter,
+          status: "PENDING",
+        },
       });
 
       return { totalMembers, activeThisWeek, pendingInvites };
     }
 
-    // For regular users, show limited stats
+    // For regular users
     return { totalMembers: 1, activeThisWeek: 1, pendingInvites: 0 };
   } catch (error) {
     console.error("Error fetching team stats:", error);
@@ -121,7 +151,7 @@ export const getDataExports = cache(async () => {
     if (!user) return [];
 
     const exports = await prisma.dataExport.findMany({
-      where: user.role === "ADMIN" ? {} : { userId: user.id },
+      where: { userId: user.id },
       orderBy: { createdAt: "desc" },
       take: 10,
     });
@@ -150,8 +180,7 @@ export const getUserSettings = cache(async () => {
 
 export const getUser = cache(async () => {
   try {
-    const user = await getCurrentUser();
-    return user;
+    return await getCurrentUser();
   } catch (error) {
     console.error("Error fetching user:", error);
     return null;
@@ -195,10 +224,13 @@ export const getUserInvoices = cache(async () => {
 export const getRecentInventoryActivity = cache(async () => {
   try {
     const user = await getCurrentUser();
-    if (!user) return [];
+    if (!user || !user.organizationId) return [];
 
+    // Admins see Org activity, Users see their own (or also Org activity?)
+    // In a team app, usually everyone sees Org activity.
+    // We'll scope to Organization for everyone.
     const recentItems = await prisma.inventoryItem.findMany({
-      where: user.role === "ADMIN" ? {} : { userId: user.id },
+      where: { organizationId: user.organizationId },
       orderBy: { updatedAt: "desc" },
       take: 5,
     });
@@ -212,14 +244,14 @@ export const getRecentInventoryActivity = cache(async () => {
 export const getExpiringSoonItems = cache(async () => {
   try {
     const user = await getCurrentUser();
-    if (!user) return [];
+    if (!user || !user.organizationId) return [];
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
+
     const items = await prisma.inventoryItem.findMany({
       where: {
-        ...(user.role === "ADMIN" ? {} : { userId: user.id }),
+        organizationId: user.organizationId, // Scope to Org
         expiration_date: {
           lte: tomorrow,
           gte: new Date(),
