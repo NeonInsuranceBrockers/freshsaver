@@ -167,7 +167,7 @@ const SidebarCollapsible: React.FC<SidebarCollapsibleProps> = ({
               isExpanded ? "" : "mx-auto"
             )}
           >
-            <IconComponent className="h-5 w-5 flex-shrink-0" />
+            <IconComponent className="h-5 w-5 shrink-0" />
             {isExpanded && (
               <span className="font-medium text-sm truncate">{item.name}</span>
             )}

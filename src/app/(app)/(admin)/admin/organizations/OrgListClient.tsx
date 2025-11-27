@@ -164,6 +164,21 @@ export function OrgListClient({ initialOrgs }: Props) {
                 Active
               </span>
             </div>
+
+            {/* Admin Details */}
+            {org.users[0] && (
+              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                <p className="font-semibold text-gray-700 dark:text-gray-300">
+                  Admin: {org.users[0].name}
+                </p>
+                <p className="truncate" title={org.users[0].email}>
+                  {org.users[0].email}
+                </p>
+                <p className="font-mono text-[10px] text-gray-400">
+                  Clerk ID: {org.users[0].clerkId || "Pending Signup"}
+                </p>
+              </div>
+            )}
           </div>
         ))}
 

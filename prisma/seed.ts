@@ -171,8 +171,81 @@ async function main() {
       moneySaved: 500.0,
       wasteReduction: 15,
       activeUsers: 3, // Calculated at runtime usually
+      itemsExpiringSoon: 2,
     },
   });
+
+  console.log("Seeded Analytics.");
+
+  // 7. Seed Data Exports
+  await prisma.dataExport.createMany({
+    data: [
+      {
+        userId: orgAdmin.id,
+        name: "Inventory Report - Current Month",
+        format: "CSV",
+        size: "2.4 MB",
+        status: "COMPLETED",
+        downloadUrl: "/exports/inventory-report.csv",
+        createdAt: getPastDate(5),
+      },
+      {
+        userId: orgAdmin.id,
+        name: "Waste Analysis - Last Quarter",
+        format: "PDF",
+        size: "1.8 MB",
+        status: "COMPLETED",
+        downloadUrl: "/exports/waste-analysis.pdf",
+        createdAt: getPastDate(15),
+      },
+      {
+        userId: memberUser.id,
+        name: "Recipe History - Full Export",
+        format: "JSON",
+        size: "3.2 MB",
+        status: "COMPLETED",
+        downloadUrl: "/exports/recipe-history.json",
+        createdAt: getPastDate(30),
+      },
+    ],
+  });
+
+  console.log("Seeded Data Exports.");
+
+  // 8. Seed User Settings
+  await prisma.userSettings.createMany({
+    data: [
+      {
+        userId: superAdmin.id,
+        timezone: "America/New_York",
+        language: "en-US",
+        measurementUnit: "IMPERIAL",
+        theme: "DARK",
+        compactView: true,
+        autoRefresh: true,
+      },
+      {
+        userId: orgAdmin.id,
+        timezone: "America/Los_Angeles",
+        language: "en-US",
+        measurementUnit: "METRIC",
+        theme: "LIGHT",
+        compactView: false,
+        autoRefresh: true,
+      },
+      {
+        userId: memberUser.id,
+        timezone: "UTC",
+        language: "en-US",
+        measurementUnit: "IMPERIAL",
+        theme: "SYSTEM",
+        compactView: false,
+        autoRefresh: true,
+      },
+    ],
+  });
+
+  console.log("Seeded User Settings.");
 
   console.log("Seeding finished successfully!");
   console.log("-------------------------------------");

@@ -15,6 +15,11 @@ export type OrganizationListDisplay = {
   _count: {
     users: number;
   };
+  users: {
+    clerkId: string | null;
+    email: string;
+    name: string;
+  }[];
 };
 
 // --- Helpers ---
@@ -27,7 +32,7 @@ async function requireSuperAdmin() {
 }
 
 /**
- * Fetch all organizations with user counts.
+ * Fetch all organizations with user counts and admin details.
  */
 export async function getAllOrganizationsAction(): Promise<
   OrganizationListDisplay[]
@@ -38,6 +43,15 @@ export async function getAllOrganizationsAction(): Promise<
     include: {
       _count: {
         select: { users: true },
+      },
+      users: {
+        where: { role: "ORG_ADMIN" },
+        take: 1,
+        select: {
+          clerkId: true,
+          email: true,
+          name: true,
+        },
       },
     },
     orderBy: { createdAt: "desc" },

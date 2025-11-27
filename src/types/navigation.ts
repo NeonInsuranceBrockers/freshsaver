@@ -79,7 +79,7 @@ export const NAV_ITEMS: SidebarItem[] = [
     subItems: [
       {
         name: "Profile",
-        href: "/settings/profile",
+        href: "/settings/general",
         icon: "User",
       },
       {
@@ -115,6 +115,12 @@ export const NAV_ITEMS: SidebarItem[] = [
         name: "Organizations",
         href: "/admin/organizations",
         icon: "Building2",
+        roles: ["SUPER_ADMIN"],
+      },
+      {
+        name: "Users",
+        href: "/admin/users",
+        icon: "Users",
         roles: ["SUPER_ADMIN"],
       },
       {

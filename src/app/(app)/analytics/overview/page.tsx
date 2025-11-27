@@ -1,8 +1,32 @@
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AreaChart, TrendingUp, Users, DollarSign } from "lucide-react";
+import { getAuthenticatedUser } from "@/lib/auth/session";
+import prisma from "@/lib/db/prisma";
 
-export default function AnalyticsOverviewPage() {
+export default async function AnalyticsOverviewPage() {
+  const user = await getAuthenticatedUser();
+
+  // Fetch the latest analytics snapshot for the user
+  const latestSnapshot = await prisma.analyticsSnapshot.findFirst({
+    where: { userId: user.id },
+    orderBy: { date: "desc" },
+  });
+
+  // Fetch user count for the organization
+  const activeUsers = await prisma.user.count({
+    where: {
+      organizationId: user.organizationId,
+      status: "ACTIVE",
+    },
+  });
+
+  // Use snapshot data or defaults
+  const totalItems = latestSnapshot?.totalItems || 0;
+  const moneySaved = latestSnapshot?.moneySaved || 0;
+  const wasteReduction = latestSnapshot?.wasteReduction || 0;
+  const itemsExpiringSoon = latestSnapshot?.itemsExpiringSoon || 0;
+
   return (
     <div className="p-6 space-y-8">
       <div>
@@ -19,8 +43,10 @@ export default function AnalyticsOverviewPage() {
             <AreaChart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">245</div>
-            <p className="text-xs text-muted-foreground">+12% from last month</p>
+            <div className="text-2xl font-bold">{totalItems}</div>
+            <p className="text-xs text-muted-foreground">
+              {itemsExpiringSoon > 0 ? `${itemsExpiringSoon} expiring soon` : "All items fresh"}
+            </p>
           </CardContent>
         </Card>
 
@@ -30,8 +56,8 @@ export default function AnalyticsOverviewPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">$1,234</div>
-            <p className="text-xs text-muted-foreground">+8% from last month</p>
+            <div className="text-2xl font-bold">${moneySaved.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">By reducing waste</p>
           </CardContent>
         </Card>
 
@@ -41,8 +67,10 @@ export default function AnalyticsOverviewPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">4</div>
-            <p className="text-xs text-muted-foreground">Family members</p>
+            <div className="text-2xl font-bold">{activeUsers}</div>
+            <p className="text-xs text-muted-foreground">
+              {user.organizationId ? "Organization members" : "Family members"}
+            </p>
           </CardContent>
         </Card>
 
@@ -52,7 +80,7 @@ export default function AnalyticsOverviewPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">32%</div>
+            <div className="text-2xl font-bold">{wasteReduction.toFixed(1)}%</div>
             <p className="text-xs text-muted-foreground">Compared to baseline</p>
           </CardContent>
         </Card>
@@ -64,30 +92,40 @@ export default function AnalyticsOverviewPage() {
           <CardDescription>Key findings from your kitchen data</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-start space-x-4">
-              <div className="bg-primary/10 p-2 rounded-lg">
-                <TrendingUp className="h-5 w-5 text-primary" />
+          {latestSnapshot ? (
+            <div className="space-y-4">
+              <div className="flex items-start space-x-4">
+                <div className="bg-primary/10 p-2 rounded-lg">
+                  <TrendingUp className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium">Current Performance</p>
+                  <p className="text-sm text-muted-foreground">
+                    Tracking {totalItems} items with ${moneySaved.toFixed(2)} saved through waste reduction.
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="font-medium">Improved Efficiency</p>
-                <p className="text-sm text-muted-foreground">
-                  Your meal planning has reduced grocery trips by 25% this month.
-                </p>
-              </div>
+              {itemsExpiringSoon > 0 && (
+                <div className="flex items-start space-x-4">
+                  <div className="bg-yellow-100 dark:bg-yellow-900/30 p-2 rounded-lg">
+                    <AreaChart className="h-5 w-5 text-yellow-600 dark:text-yellow-500" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Attention Needed</p>
+                    <p className="text-sm text-muted-foreground">
+                      {itemsExpiringSoon} items are expiring soon. Check your inventory to prevent waste.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="flex items-start space-x-4">
-              <div className="bg-primary/10 p-2 rounded-lg">
-                <AreaChart className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="font-medium">Peak Usage Times</p>
-                <p className="text-sm text-muted-foreground">
-                  Most inventory updates happen on weekends between 10 AM - 2 PM.
-                </p>
-              </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <AreaChart className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              <p>No analytics data available yet</p>
+              <p className="text-sm">Start tracking inventory to see insights</p>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>
