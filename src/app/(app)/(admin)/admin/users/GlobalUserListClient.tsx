@@ -6,7 +6,6 @@ import {
   GlobalUserDisplay,
   assignUserToOrgAction,
   updateUserStatusAction,
-  getOrgOptionsAction,
 } from "./actions";
 import { UserRole, UserStatus } from "@prisma/client";
 import { Button } from "@/components/ui/button";
@@ -21,11 +20,9 @@ import {
 import {
   Loader2,
   CheckCircle,
-  AlertTriangle,
   Lock,
   Building,
 } from "lucide-react";
-import { format } from "date-fns";
 
 interface OrgOption {
   id: string;
@@ -73,11 +70,11 @@ export function GlobalUserListClient({ initialUsers, orgOptions }: Props) {
         users.map((u) =>
           u.id === userId
             ? {
-                ...u,
-                organization: orgOptions.find((o) => o.id === orgId) || null,
-                role: role,
-                status: UserStatus.ACTIVE, // Assume assignment means activation
-              }
+              ...u,
+              organization: orgOptions.find((o) => o.id === orgId) || null,
+              role: role,
+              status: UserStatus.ACTIVE, // Assume assignment means activation
+            }
             : u
         )
       );
@@ -127,7 +124,7 @@ export function GlobalUserListClient({ initialUsers, orgOptions }: Props) {
               key={user.id}
               className={
                 user.status === UserStatus.UNAUTHORIZED ||
-                user.status === UserStatus.PENDING
+                  user.status === UserStatus.PENDING
                   ? "bg-red-50/30 dark:bg-red-900/10 hover:bg-red-50/50"
                   : ""
               }
@@ -149,9 +146,8 @@ export function GlobalUserListClient({ initialUsers, orgOptions }: Props) {
 
               <TableCell>
                 <span
-                  className={`px-2 py-1 text-xs font-semibold rounded-full border ${
-                    statusMap[user.status]
-                  }`}
+                  className={`px-2 py-1 text-xs font-semibold rounded-full border ${statusMap[user.status]
+                    }`}
                 >
                   {user.status}
                 </span>
@@ -159,9 +155,8 @@ export function GlobalUserListClient({ initialUsers, orgOptions }: Props) {
 
               <TableCell>
                 <span
-                  className={`px-2 py-1 text-xs font-semibold rounded-full border ${
-                    roleMap[user.role]
-                  }`}
+                  className={`px-2 py-1 text-xs font-semibold rounded-full border ${roleMap[user.role]
+                    }`}
                 >
                   {user.role}
                 </span>
@@ -183,7 +178,7 @@ export function GlobalUserListClient({ initialUsers, orgOptions }: Props) {
               <TableCell className="text-right w-64">
                 {/* --- Action Buttons --- */}
                 {user.status === UserStatus.UNAUTHORIZED ||
-                user.status === UserStatus.PENDING ? (
+                  user.status === UserStatus.PENDING ? (
                   // ASSIGNMENT FORM FOR UNAUTHORIZED/PENDING USERS
                   <AssignmentForm
                     userId={user.id}

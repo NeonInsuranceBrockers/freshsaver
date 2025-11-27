@@ -139,14 +139,55 @@ export async function updateUserStatusAction(
   await requireSuperAdmin();
 
   try {
+    // 1. Fetch the user to check current Clerk ID
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!targetUser) {
+      return { success: false, message: "User not found." };
+    }
+
+    let clerkIdToUpdate = targetUser.clerkId;
+
+    // 2. If activating and no Clerk ID, try to find in Clerk
+    if (status === "ACTIVE" && !clerkIdToUpdate) {
+      try {
+        const client = await clerkClient();
+        const clerkUsers = await client.users.getUserList({
+          emailAddress: [targetUser.email],
+          limit: 1,
+        });
+
+        if (clerkUsers.data.length > 0) {
+          clerkIdToUpdate = clerkUsers.data[0].id;
+          console.log(
+            `[Admin] Found matching Clerk user for ${targetUser.email}: ${clerkIdToUpdate}`
+          );
+        }
+      } catch (error) {
+        console.error("[Admin] Failed to lookup user in Clerk:", error);
+      }
+    }
+
+    // 3. Update the user
     await prisma.user.update({
       where: { id: userId },
-      data: { status },
+      data: {
+        status,
+        clerkId: clerkIdToUpdate, // Update if we found one
+      },
     });
+
     revalidatePath("/admin/users");
-    return { success: true, message: `User status updated to ${status}` };
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    return {
+      success: true,
+      message: clerkIdToUpdate
+        ? `User status updated to ${status} (Clerk ID linked)`
+        : `User status updated to ${status}`,
+    };
   } catch (error) {
+    console.error("Error updating user status:", error);
     return { success: false, message: "Failed to update status." };
   }
 }

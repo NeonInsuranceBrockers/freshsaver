@@ -4,11 +4,11 @@ import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Key, Plus, Copy, Trash2, Eye, EyeOff } from "lucide-react";
+import { Plus, Copy, Trash2, Eye, EyeOff } from "lucide-react";
 
 export default function ApiKeysPage() {
   const [showKey, setShowKey] = useState<{ [key: number]: boolean }>({});
-  
+
   const apiKeys = [
     { id: 1, name: "Production API", key: "sk_live_1234567890abcdef", created: "2025-01-15", lastUsed: "2 hours ago" },
     { id: 2, name: "Development API", key: "sk_test_abcdef1234567890", created: "2025-01-10", lastUsed: "1 day ago" },
@@ -59,13 +59,13 @@ export default function ApiKeysPage() {
                   </Button>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Input 
-                    value={showKey[apiKey.id] ? apiKey.key : maskKey(apiKey.key)} 
-                    readOnly 
+                  <Input
+                    value={showKey[apiKey.id] ? apiKey.key : maskKey(apiKey.key)}
+                    readOnly
                     className="font-mono text-sm"
                   />
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="icon"
                     onClick={() => toggleKeyVisibility(apiKey.id)}
                   >

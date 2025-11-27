@@ -1,7 +1,7 @@
 // app/(app)/dashboard/components/AutomationAudit.tsx
 import React from "react";
 import { DashboardData } from "@/types/dashboard";
-import { InventoryItem, Flow } from "@prisma/client";
+import { Flow } from "@prisma/client";
 import { WasteTrendChart } from "./ui/WasteTrendChart.client"; // Client Chart
 import {
   ActivityControlLog,
@@ -38,11 +38,11 @@ export const AutomationAudit: React.FC<AutomationAuditProps> = ({
   const deduplicationRate =
     notificationsLast30Days > 0
       ? ((notificationsLast30Days - uniqueNotificationsCount) /
-          notificationsLast30Days) *
-        100
+        notificationsLast30Days) *
+      100
       : 0;
 
-  const deduplicationText = `${deduplicationRate.toFixed(1)}% deduplicated`;
+
   const auditColor = deduplicationRate > 5 ? "green" : "yellow";
 
   // --- Activity Feed Mocking/Preparation ---
@@ -102,11 +102,10 @@ export const AutomationAudit: React.FC<AutomationAuditProps> = ({
       <div className="space-y-6">
         {/* KPI: Deduplication Rate */}
         <div
-          className={`p-4 border rounded-xl shadow-sm ${
-            auditColor === "green"
-              ? "bg-green-50/50 border-green-300"
-              : "bg-yellow-50/50 border-yellow-300"
-          }`}
+          className={`p-4 border rounded-xl shadow-sm ${auditColor === "green"
+            ? "bg-green-50/50 border-green-300"
+            : "bg-yellow-50/50 border-yellow-300"
+            }`}
         >
           <h5 className="text-sm font-medium opacity-80">
             Notification Efficiency

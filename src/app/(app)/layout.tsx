@@ -7,6 +7,8 @@ import NotificationToast from "@/components/ui/NotificationToast";
 import Providers from "@/components/NProgressProvider";
 import "@/lib/cron";
 
+export const dynamic = "force-dynamic";
+
 // This is a Server Component. It fetches data on the server.
 export default async function AppLayout({
   children,

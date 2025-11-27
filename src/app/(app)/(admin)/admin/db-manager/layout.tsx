@@ -3,7 +3,6 @@
 import React from "react";
 import { getAuthenticatedUser } from "@/lib/auth/session";
 import { UserRole } from "@prisma/client";
-import { redirect } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 
 export default async function AdminLayout({

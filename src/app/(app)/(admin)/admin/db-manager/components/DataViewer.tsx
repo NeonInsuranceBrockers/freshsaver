@@ -25,7 +25,6 @@ import {
   Database,
   SearchX,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 interface DataViewerProps {
   tableNames: string[];
@@ -160,7 +159,7 @@ export default function DataViewer({
                           ) {
                             try {
                               displayVal = new Date(val).toLocaleString();
-                            } catch (e) {}
+                            } catch { }
                           }
                           // Handle objects/arrays
                           if (typeof val === "object" && val !== null) {

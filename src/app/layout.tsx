@@ -114,7 +114,8 @@ export default function RootLayout({
           {/* <Navbar /> Use our Navbar component */}
           {/* ✅ RENDER THE WRAPPER INSTEAD */}
           <main className="grow">
-            <Providers>{children}</Providers>
+            {/* <Providers>{children}</Providers> */}
+            {children}
           </main>
 
           {/* <Footer /> */}

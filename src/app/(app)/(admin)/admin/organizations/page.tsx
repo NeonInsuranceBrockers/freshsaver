@@ -5,7 +5,6 @@ import { getAuthenticatedUser } from "@/lib/auth/session";
 import { getAllOrganizationsAction } from "./actions";
 import { OrgListClient } from "./OrgListClient";
 import { Building2, ShieldAlert } from "lucide-react";
-import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "Organization Management | Super Admin",
