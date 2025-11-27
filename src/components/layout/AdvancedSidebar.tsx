@@ -1,4 +1,4 @@
-// src/components/layout/AdvancedSidebar.tsx
+// /src/components/layout/AdvancedSidebar.tsx
 "use client";
 
 import React, { useState, useMemo } from "react";
@@ -19,14 +19,15 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
-  SidebarItem,
   NavCollapsibleItem,
   NavItem,
   NAV_ITEMS,
   SidebarState,
+  SidebarItem,
 } from "@/types/navigation";
 import { getLucideIcon } from "@/lib/icons";
 import { cn } from "@/lib/utils";
+import { UserRole } from "@prisma/client";
 
 // Utility to manage fixed width classes for the sidebar container
 const widthClasses: Record<SidebarState, string> = {
@@ -34,6 +35,45 @@ const widthClasses: Record<SidebarState, string> = {
   iconOnly: "w-20 px-2",
   hidden: "w-0 p-0",
 };
+
+/**
+ * RECURSIVE FILTER:
+ * 1. Checks if the item requires specific roles.
+ * 2. If it's a group, recursively filters its sub-items.
+ * 3. If a group ends up empty after filtering, it is removed entirely.
+ */
+function filterNavItems(
+  items: SidebarItem[],
+  userRole?: string
+): SidebarItem[] {
+  return items
+    .filter((item) => {
+      // If roles are defined on the item, check if user has one of them
+      if (item.roles && item.roles.length > 0) {
+        if (!userRole) return false;
+        if (!item.roles.includes(userRole as UserRole)) return false;
+      }
+      return true;
+    })
+    .map((item) => {
+      // If it is a collapsible item, recurse into subItems
+      if (item.collapsible) {
+        const filteredSubItems = filterNavItems(
+          item.subItems,
+          userRole
+        ) as NavItem[];
+        return { ...item, subItems: filteredSubItems };
+      }
+      return item;
+    })
+    .filter((item) => {
+      // Remove groups that became empty after filtering sub-items
+      if (item.collapsible && item.subItems.length === 0) {
+        return false;
+      }
+      return true;
+    });
+}
 
 // --- Component 1: Individual Link Item ---
 
@@ -50,8 +90,6 @@ const SidebarLink: React.FC<SidebarLinkProps> = ({
   isExpanded,
   IconComponent,
 }) => {
-  // All hooks (if any) are called here unconditionally. None needed for this link.
-
   return (
     <Link
       href={item.href}
@@ -60,22 +98,18 @@ const SidebarLink: React.FC<SidebarLinkProps> = ({
         isActive
           ? "bg-primary text-primary-foreground shadow-md"
           : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-        // Styling based on expansion state
         isExpanded ? "px-3" : "justify-center w-full px-0"
       )}
-      // Add title for better accessibility in icon-only mode
       title={item.name}
     >
       <IconComponent
-        className={cn("h-5 w-5 flex-shrink-0", isExpanded ? "" : "mx-auto")}
+        className={cn("h-5 w-5 shrink-0", isExpanded ? "" : "mx-auto")}
       />
       {isExpanded && (
         <span className="font-medium whitespace-nowrap text-sm truncate">
           {item.name}
         </span>
       )}
-
-      {/* ADVANCED: Tooltip for iconOnly state */}
       {!isExpanded && (
         <span
           className="absolute left-full ml-4 hidden group-hover:block px-3 py-1 bg-gray-900 text-white text-xs rounded-md shadow-lg z-50 whitespace-nowrap dark:bg-gray-700"
@@ -101,16 +135,13 @@ const SidebarCollapsible: React.FC<SidebarCollapsibleProps> = ({
   currentPath,
   isExpanded,
 }) => {
-  // Hook 1: Determine if the group contains the active route
   const isGroupActive = useMemo(
     () => item.subItems.some((sub) => currentPath.startsWith(sub.href)),
     [currentPath, item.subItems]
   );
 
-  // Hook 2: Manage the collapsible open state (MUST be called unconditionally)
   const [isOpen, setIsOpen] = useState(isGroupActive);
 
-  // Hook 3: Ensure collapsible state syncs if a subitem becomes active (e.g., direct link navigation)
   React.useEffect(() => {
     if (isGroupActive) {
       setIsOpen(true);
@@ -118,7 +149,7 @@ const SidebarCollapsible: React.FC<SidebarCollapsibleProps> = ({
   }, [isGroupActive]);
 
   const IconComponent = getLucideIcon(item.icon);
-  if (!IconComponent) return null; // Safe early return
+  if (!IconComponent) return null;
 
   return (
     <Collapsible
@@ -136,7 +167,6 @@ const SidebarCollapsible: React.FC<SidebarCollapsibleProps> = ({
               ? "bg-accent/70 text-accent-foreground"
               : "text-muted-foreground hover:bg-accent/50"
           )}
-          // Disable trigger interaction when minimized (rely on tooltip for label)
           disabled={!isExpanded}
           title={item.name}
         >
@@ -161,7 +191,6 @@ const SidebarCollapsible: React.FC<SidebarCollapsibleProps> = ({
             />
           )}
 
-          {/* ADVANCED: Tooltip for iconOnly state */}
           {!isExpanded && (
             <span
               className="absolute left-full ml-4 hidden group-hover:block px-3 py-1 bg-gray-900 text-white text-xs rounded-md shadow-lg z-50 whitespace-nowrap dark:bg-gray-700"
@@ -173,7 +202,6 @@ const SidebarCollapsible: React.FC<SidebarCollapsibleProps> = ({
         </Button>
       </CollapsibleTrigger>
 
-      {/* ADVANCED: Only render Collapsible Content when Expanded */}
       {isExpanded && (
         <CollapsibleContent className="pl-6 space-y-1 mt-1">
           {item.subItems.map((subItem) => {
@@ -183,7 +211,7 @@ const SidebarCollapsible: React.FC<SidebarCollapsibleProps> = ({
                 key={subItem.name}
                 item={subItem}
                 isActive={currentPath === subItem.href}
-                isExpanded={true} // Sub-links are always fully labeled
+                isExpanded={true}
                 IconComponent={SubIcon}
               />
             );
@@ -199,11 +227,13 @@ const SidebarCollapsible: React.FC<SidebarCollapsibleProps> = ({
 interface AdvancedSidebarProps {
   sidebarState: SidebarState;
   setSidebarState: React.Dispatch<React.SetStateAction<SidebarState>>;
+  userRole?: string; // NEW PROP: Role string (e.g., "SUPER_ADMIN")
 }
 
 export function AdvancedSidebar({
   sidebarState,
   setSidebarState,
+  userRole,
 }: AdvancedSidebarProps) {
   const pathname = usePathname();
 
@@ -211,14 +241,18 @@ export function AdvancedSidebar({
   const isIconOnly = sidebarState === "iconOnly";
   const isHidden = sidebarState === "hidden";
 
-  // State Cycling Logic
+  // Filter Items based on Role using useMemo for performance
+  const filteredItems = useMemo(
+    () => filterNavItems(NAV_ITEMS, userRole),
+    [userRole]
+  );
+
   const cycleState = () => {
     if (isExpanded) setSidebarState("iconOnly");
     else if (isIconOnly) setSidebarState("hidden");
     else setSidebarState("expanded");
   };
 
-  // --- Render for 'Hidden' State (Mobile Hamburger) ---
   if (isHidden) {
     return (
       <div className="fixed top-4 left-4 z-[100] transition-all duration-300">
@@ -236,6 +270,8 @@ export function AdvancedSidebar({
   }
 
   function handleLogout() {
+    // Basic clearing of fallback session cookie.
+    // In a real Clerk app, utilize <SignOutButton> or useClerk().signOut()
     document.cookie =
       "freshsaver-session=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 UTC";
     window.location.href = "/login";
@@ -243,8 +279,7 @@ export function AdvancedSidebar({
 
   return (
     <>
-      {/* Mobile Overlay Backdrop */}
-      <div 
+      <div
         className={cn(
           "fixed inset-0 bg-black/50 z-30 md:hidden transition-opacity duration-300",
           isHidden ? "opacity-0 pointer-events-none" : "opacity-100"
@@ -260,7 +295,6 @@ export function AdvancedSidebar({
           isIconOnly && "overflow-y-hidden hover:overflow-y-auto"
         )}
       >
-        {/* Header/Logo Section */}
         <div
           className={cn(
             "h-16 flex items-center border-b border-sidebar-border bg-sidebar",
@@ -270,10 +304,16 @@ export function AdvancedSidebar({
           {isExpanded ? (
             <>
               <Link href="/dashboard" className="flex items-center space-x-2">
-                <span className="font-bold text-xl tracking-tight text-primary">FreshSaver</span>
+                <span className="font-bold text-xl tracking-tight text-primary">
+                  FreshSaver
+                </span>
               </Link>
-              {/* Mobile Close Button */}
-              <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSidebarState("hidden")}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden"
+                onClick={() => setSidebarState("hidden")}
+              >
                 <ChevronLeft className="h-5 w-5" />
               </Button>
             </>
@@ -282,10 +322,9 @@ export function AdvancedSidebar({
           )}
         </div>
 
-        {/* Navigation Links (Scrollable) */}
         <ScrollArea className="flex-1 py-4">
           <div className="space-y-1 px-2">
-            {NAV_ITEMS.map((item) => {
+            {filteredItems.map((item) => {
               if (item.collapsible) {
                 return (
                   <React.Fragment key={item.name}>
@@ -306,7 +345,9 @@ export function AdvancedSidebar({
 
               return (
                 <React.Fragment key={item.name}>
-                  {item.separator && <div className="h-px bg-sidebar-border my-4 mx-2" />}
+                  {item.separator && (
+                    <div className="h-px bg-sidebar-border my-4 mx-2" />
+                  )}
                   <SidebarLink
                     item={item as NavItem}
                     isActive={pathname === item.href}
@@ -320,14 +361,12 @@ export function AdvancedSidebar({
           <div className="h-10" />
         </ScrollArea>
 
-        {/* Footer / Logout / Retraction Control */}
         <div
           className={cn(
             "p-4 border-t border-sidebar-border sticky bottom-0 bg-sidebar z-50 transition-all duration-300",
             isExpanded ? "space-y-2" : "flex flex-col items-center space-y-3"
           )}
         >
-          {/* User/Logout Action */}
           <Button
             variant="ghost"
             className={cn(
@@ -343,7 +382,6 @@ export function AdvancedSidebar({
             {isExpanded && <span className="ml-3 text-sm">Logout</span>}
           </Button>
 
-          {/* Retraction Control Button (Desktop Only) */}
           <Button
             variant="secondary"
             className={cn(

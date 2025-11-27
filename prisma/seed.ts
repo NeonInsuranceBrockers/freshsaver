@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 // --- CONFIGURATION ---
 // REPLACE THIS WITH YOUR REAL CLERK EMAIL TO GET SUPER ADMIN ACCESS IMMEDIATELY
 const SUPER_ADMIN_EMAIL = "markmae840@gmail.com";
-const SUPER_ADMIN_CLERK_ID = null;
+const SUPER_ADMIN_CLERK_ID = "user_35ym3dO3HsQXKiRIHAeFDNY6zC8";
 
 const getFutureDate = (daysFromNow: number): Date => {
   const date = new Date();
