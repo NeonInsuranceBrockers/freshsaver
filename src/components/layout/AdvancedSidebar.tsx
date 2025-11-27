@@ -12,7 +12,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+// REMOVED: import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Collapsible,
   CollapsibleContent,
@@ -29,7 +29,6 @@ import { getLucideIcon } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { UserRole } from "@prisma/client";
 
-// Utility to manage fixed width classes for the sidebar container
 const widthClasses: Record<SidebarState, string> = {
   expanded: "w-72 px-4",
   iconOnly: "w-20 px-2",
@@ -37,10 +36,7 @@ const widthClasses: Record<SidebarState, string> = {
 };
 
 /**
- * RECURSIVE FILTER:
- * 1. Checks if the item requires specific roles.
- * 2. If it's a group, recursively filters its sub-items.
- * 3. If a group ends up empty after filtering, it is removed entirely.
+ * RECURSIVE FILTER: Checks roles and filters items.
  */
 function filterNavItems(
   items: SidebarItem[],
@@ -48,7 +44,6 @@ function filterNavItems(
 ): SidebarItem[] {
   return items
     .filter((item) => {
-      // If roles are defined on the item, check if user has one of them
       if (item.roles && item.roles.length > 0) {
         if (!userRole) return false;
         if (!item.roles.includes(userRole as UserRole)) return false;
@@ -56,7 +51,6 @@ function filterNavItems(
       return true;
     })
     .map((item) => {
-      // If it is a collapsible item, recurse into subItems
       if (item.collapsible) {
         const filteredSubItems = filterNavItems(
           item.subItems,
@@ -67,7 +61,6 @@ function filterNavItems(
       return item;
     })
     .filter((item) => {
-      // Remove groups that became empty after filtering sub-items
       if (item.collapsible && item.subItems.length === 0) {
         return false;
       }
@@ -76,7 +69,6 @@ function filterNavItems(
 }
 
 // --- Component 1: Individual Link Item ---
-
 interface SidebarLinkProps {
   item: NavItem;
   isActive: boolean;
@@ -123,7 +115,6 @@ const SidebarLink: React.FC<SidebarLinkProps> = ({
 };
 
 // --- Component 2: Collapsible Menu Item ---
-
 interface SidebarCollapsibleProps {
   item: NavCollapsibleItem;
   currentPath: string;
@@ -223,11 +214,10 @@ const SidebarCollapsible: React.FC<SidebarCollapsibleProps> = ({
 };
 
 // --- Component 3: Main Advanced Sidebar ---
-
 interface AdvancedSidebarProps {
   sidebarState: SidebarState;
   setSidebarState: React.Dispatch<React.SetStateAction<SidebarState>>;
-  userRole?: string; // NEW PROP: Role string (e.g., "SUPER_ADMIN")
+  userRole?: string;
 }
 
 export function AdvancedSidebar({
@@ -241,7 +231,6 @@ export function AdvancedSidebar({
   const isIconOnly = sidebarState === "iconOnly";
   const isHidden = sidebarState === "hidden";
 
-  // Filter Items based on Role using useMemo for performance
   const filteredItems = useMemo(
     () => filterNavItems(NAV_ITEMS, userRole),
     [userRole]
@@ -270,8 +259,6 @@ export function AdvancedSidebar({
   }
 
   function handleLogout() {
-    // Basic clearing of fallback session cookie.
-    // In a real Clerk app, utilize <SignOutButton> or useClerk().signOut()
     document.cookie =
       "freshsaver-session=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 UTC";
     window.location.href = "/login";
@@ -295,9 +282,10 @@ export function AdvancedSidebar({
           isIconOnly && "overflow-y-hidden hover:overflow-y-auto"
         )}
       >
+        {/* Header */}
         <div
           className={cn(
-            "h-16 flex items-center border-b border-sidebar-border bg-sidebar",
+            "h-16 flex-shrink-0 flex items-center border-b border-sidebar-border bg-sidebar",
             isExpanded ? "justify-between px-4" : "justify-center"
           )}
         >
@@ -322,8 +310,14 @@ export function AdvancedSidebar({
           )}
         </div>
 
-        <ScrollArea className="flex-1 py-4">
-          <div className="space-y-1 px-2">
+        {/* 
+          SCROLLABLE AREA FIX:
+          1. flex-1: Takes up all remaining vertical space.
+          2. overflow-y-auto: Enables scrolling within this specific div.
+          3. scrollbar-thin: Optional styling for webkit browsers.
+        */}
+        <div className="flex-1 overflow-y-auto py-4 px-2 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-700">
+          <div className="space-y-1">
             {filteredItems.map((item) => {
               if (item.collapsible) {
                 return (
@@ -358,12 +352,14 @@ export function AdvancedSidebar({
               );
             })}
           </div>
+          {/* Extra padding at bottom to prevent footer overlap issues on small screens */}
           <div className="h-10" />
-        </ScrollArea>
+        </div>
 
+        {/* Footer */}
         <div
           className={cn(
-            "p-4 border-t border-sidebar-border sticky bottom-0 bg-sidebar z-50 transition-all duration-300",
+            "flex-shrink-0 p-4 border-t border-sidebar-border bg-sidebar z-50 transition-all duration-300",
             isExpanded ? "space-y-2" : "flex flex-col items-center space-y-3"
           )}
         >
